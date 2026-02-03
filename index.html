@@ -1,38 +1,104 @@
 <!DOCTYPE html>
 <html lang="ku" dir="rtl">
 <head>
-    <meta charset="UTF-8"> 
-    <title>Kurde Store</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>Kurde Store | کوردی ستۆر</title>
     <style>
-        /* Using a system font stack that supports Kurdish/Arabic characters */
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, -apple-system; 
-            text-align: center; 
-            padding: 50px; 
-            background-color: #f2f2f7;
-            line-height: 1.6;
+        :root { --ios-blue: #007aff; --bg-color: #f2f2f7; --card-bg: #ffffff; }
+        body { font-family: 'Segoe UI', Tahoma, -apple-system, sans-serif; background: var(--bg-color); margin: 0; padding: 20px; color: #1c1c1e; }
+        
+        header { text-align: center; margin-bottom: 30px; padding-top: 20px; }
+        header h1 { font-size: 34px; margin-bottom: 5px; color: #000; }
+        header p { color: #3a3a3c; font-size: 18px; }
+
+        /* Registration Box */
+        .enroll-section { 
+            background: #fff; 
+            padding: 20px; 
+            border-radius: 18px; 
+            margin-bottom: 30px; 
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            border: 1px solid #e5e5ea;
         }
-        .btn { 
-            background: #007aff; 
+        .btn-enroll { 
+            background: var(--ios-blue); 
             color: white; 
-            padding: 15px 25px; 
+            padding: 14px 30px; 
             text-decoration: none; 
             border-radius: 12px; 
             font-weight: bold; 
             display: inline-block;
-            margin-top: 20px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-top: 10px;
         }
-        h1 { color: #1c1c1e; }
-        p { color: #3a3a3c; font-size: 18px; }
+
+        .search-bar { background: #e3e3e8; padding: 12px; border-radius: 12px; margin-bottom: 20px; border: none; width: 100%; box-sizing: border-box; font-size: 16px; text-align: center; }
+
+        #app-grid { display: grid; gap: 12px; }
+        
+        .app-card { background: var(--card-bg); padding: 12px; border-radius: 16px; display: flex; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+        .app-card img { width: 55px; height: 55px; border-radius: 12px; margin-left: 15px; object-fit: cover; }
+        
+        .app-info { flex-grow: 1; text-align: right; }
+        .app-name { font-weight: bold; font-size: 17px; margin: 0; }
+        .app-meta { color: #8e8e93; font-size: 12px; margin: 2px 0; }
+
+        .install-btn { background: #f0f0f7; color: var(--ios-blue); padding: 6px 16px; border-radius: 15px; text-decoration: none; font-weight: bold; font-size: 14px; }
+
+        #loading { text-align: center; color: #8e8e93; margin-top: 20px; font-size: 14px; }
     </style>
 </head>
 <body>
-    <h1>کوردی ستۆر</h1>
-    <p>ئایفۆنەکەت/ئایپادەکەت تۆماربکە لێرە (UDID)</p>
-    
-    <a href="enroll.mobileconfig?v=1" class="btn">بەژداری کردن</a>
+
+    <header>
+        <h1>کوردی ستۆر</h1>
+        <div class="enroll-section">
+            <p>ئایفۆنەکەت/ئایپادەکەت تۆماربکە لێرە (UDID)</p>
+            <a href="enroll.mobileconfig?v=1" class="btn-enroll">بەژداری کردن</a>
+        </div>
+    </header>
+
+    <input type="text" id="searchInput" class="search-bar" placeholder="گەڕان بۆ ئەپ و یارییەکان..." onkeyup="filterApps()">
+
+    <div id="loading">خەریکی گەڕان بەدوای ئەپەکاندا...</div>
+    <div id="app-grid"></div>
+
+    <script>
+        const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
+        let allApps = [];
+
+        async function fetchApps() {
+            try {
+                const response = await fetch(`${API_URL}/get-apps`);
+                allApps = await response.json();
+                displayApps(allApps);
+                document.getElementById('loading').style.display = 'none';
+            } catch (error) {
+                document.getElementById('loading').innerText = "هەڵەیەک لە هێنانەوەی ئەپەکان ڕوویدا.";
+            }
+        }
+
+        function displayApps(apps) {
+            const grid = document.getElementById('app-grid');
+            grid.innerHTML = apps.map(app => `
+                <div class="app-card">
+                    <img src="${app.icon || 'https://via.placeholder.com/60'}" alt="${app.name}">
+                    <div class="app-info">
+                        <p class="app-name">${app.name}</p>
+                        <p class="app-meta">${app.category} • ${app.version}</p>
+                    </div>
+                    <a href="itms-services://?action=download-manifest&url=${app.ipa}" class="install-btn">دابەزاندن</a>
+                </div>
+            `).join('');
+        }
+
+        function filterApps() {
+            const term = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = allApps.filter(app => app.name.toLowerCase().includes(term));
+            displayApps(filtered);
+        }
+
+        fetchApps();
+    </script>
 </body>
 </html>
