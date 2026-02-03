@@ -6,18 +6,18 @@
     <style>
         body { font-family: -apple-system, sans-serif; background: #1c1c1e; color: white; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
         #login-screen { text-align: center; background: #2c2c2e; padding: 40px; border-radius: 20px; border: 1px solid #3a3a3c; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        #admin-content { display: none; width: 100%; max-width: 1000px; padding: 20px; gap: 20px; flex-wrap: wrap; justify-content: center; }
-        .box { background: #2c2c2e; padding: 25px; border-radius: 20px; border: 1px solid #3a3a3c; flex: 1; min-width: 350px; }
+        #admin-content { display: none; width: 100%; max-width: 1000px; padding: 20px; gap: 20px; flex-wrap: wrap; justify-content: center; align-items: flex-start; }
+        .box { background: #2c2c2e; padding: 25px; border-radius: 20px; border: 1px solid #3a3a3c; flex: 1; min-width: 350px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         h1, h2 { color: #0a84ff; margin-top: 0; font-size: 22px; }
-        label { display: block; margin-top: 12px; color: #8e8e93; font-size: 12px; font-weight: bold; }
-        input, select { width: 100%; padding: 12px; margin-top: 5px; border-radius: 10px; border: 1px solid #3a3a3c; background: #1c1c1e; color: white; box-sizing: border-box; }
+        label { display: block; margin-top: 12px; color: #8e8e93; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; }
+        input, select { width: 100%; padding: 12px; margin-top: 5px; border-radius: 10px; border: 1px solid #3a3a3c; background: #1c1c1e; color: white; box-sizing: border-box; outline: none; }
+        input:focus { border-color: #0a84ff; }
         .btn { padding: 14px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; transition: 0.2s; }
         .btn-blue { background: #0a84ff; color: white; }
         .btn-green { background: #30d158; color: white; }
-        .btn-red { background: #ff3b30; color: white; padding: 6px; font-size: 11px; width: auto; }
+        .btn-red { background: #ff3b30; color: white; padding: 6px 10px; font-size: 11px; width: auto; border-radius: 8px; }
         .admin-item { display: flex; align-items: center; background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 0.5px solid #3a3a3c; }
-        .admin-item img { width: 45px; height: 45px; border-radius: 10px; margin-right: 15px; }
-        pre { background: #111; padding: 10px; border-radius: 8px; font-size: 10px; color: #30d158; max-height: 100px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+        .admin-item img { width: 45px; height: 45px; border-radius: 10px; margin-right: 15px; object-fit: cover; }
         #version-tag { position: fixed; bottom: 10px; right: 10px; font-size: 10px; color: #444; }
     </style>
 </head>
@@ -25,7 +25,7 @@
 
 <div id="login-screen">
     <h1>Admin Login</h1>
-    <p style="color: #8e8e93; font-size: 13px;">Kurde Store System v2.0</p>
+    <p style="color: #8e8e93; font-size: 13px;">Kurde Store System v3.0</p>
     <input type="password" id="passInput" placeholder="Enter Password">
     <button class="btn btn-blue" onclick="checkPass()">Unlock Master Panel</button>
 </div>
@@ -35,110 +35,119 @@
         <h1>Add New App</h1>
         <form id="appForm">
             <label>1. App Name</label>
-            <input type="text" id="name" placeholder="e.g. Minecraft" required>
+            <input type="text" id="name" placeholder="e.g. Subway Surfers" required>
             
-            <label>2. IPA Link (Direct Download Link)</label>
-            <input type="text" id="ipa_direct" placeholder="https://..." required>
-            
-            <button type="button" class="btn btn-blue" onclick="generateAndDownload()">Generate & Download .plist</button>
-            
-            <hr style="border: 0.5px solid #3a3a3c; margin: 25px 0;">
+            <label>2. Direct IPA Link</label>
+            <input type="text" id="ipa_link" placeholder="https://domain.com/file.ipa" required>
 
-            <label>3. Final Plist URL (Upload to /plists/)</label>
-            <input type="text" id="plist_url" placeholder="https://kurde.store/plists/file.plist" required>
-
-            <label>4. Icon URL (From /assets/)</label>
-            <input type="text" id="icon" placeholder="https://kurde.store/assets/icon.png">
+            <label>3. Icon URL</label>
+            <input type="text" id="icon" placeholder="https://kurde.store/assets/icon.png" required>
 
             <div style="display:flex; gap:10px;">
-                <div style="flex:1"><label>Category</label><select id="category"><option>Apps</option><option>Games</option></select></div>
-                <div style="flex:1"><label>Version</label><input type="text" id="version" placeholder="1.0"></div>
+                <div style="flex:1">
+                    <label>Category</label>
+                    <select id="category">
+                        <option value="Applications">Applications</option>
+                        <option value="Games">Games</option>
+                    </select>
+                </div>
+                <div style="flex:1">
+                    <label>Version</label>
+                    <input type="text" id="version" placeholder="1.0" value="1.0">
+                </div>
             </div>
 
-            <button type="submit" class="btn btn-green">Publish to Store</button>
+            <button type="submit" id="submitBtn" class="btn btn-green">Publish to Store</button>
         </form>
-        <div id="plistPreview" style="display:none; margin-top:15px;">
-            <pre id="plistCode"></pre>
-        </div>
     </div>
 
     <div class="box">
         <h2>Live Management</h2>
-        <div id="admin-list" style="margin-top:20px;">Loading database...</div>
+        <div id="admin-list">Loading database...</div>
     </div>
 </div>
 
-<div id="version-tag">Update: Feb 2026 | Direct-Pass-Mode</div>
+<div id="version-tag">Update: Feb 2026 | Dynamic iKurd Logic</div>
 
 <script>
-    const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
+    // Ensure this matches your AWS URL exactly
+    const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com/KurdeStore_Manager";
     
-    // DIRECT PASSWORD CHECK
     function checkPass() {
-        const input = document.getElementById('passInput').value.trim();
-        
-        if (input === "didoxrawa2027") {
+        if (document.getElementById('passInput').value === "didoxrawa2027") {
             document.getElementById('login-screen').style.display = 'none';
             document.getElementById('admin-content').style.display = 'flex';
             loadAdminList();
         } else {
-            alert("Unauthorized. If you forgot your password, check your GitHub code.");
+            alert("Wrong Password.");
         }
-    }
-
-    function generateAndDownload() {
-        const name = document.getElementById('name').value;
-        const ipa = document.getElementById('ipa_direct').value;
-        if(!name || !ipa) return alert("Missing Info!");
-
-        const plist = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>com.kurde.${name.toLowerCase().replace(/\\s/g, '')}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
-        
-        document.getElementById('plistCode').innerText = plist;
-        document.getElementById('plistPreview').style.display = "block";
-
-        const blob = new Blob([plist], { type: 'application/xml' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${name.toLowerCase().replace(/\\s/g, '_')}.plist`;
-        a.click();
     }
 
     document.getElementById('appForm').onsubmit = async (e) => {
         e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        btn.innerText = "Publishing...";
+        btn.disabled = true;
+
+        const name = document.getElementById('name').value;
+        // Creates a unique ID like "minecraft_8291"
+        const appId = name.toLowerCase().replace(/\s/g, '') + "_" + Math.floor(Math.random() * 1000);
+
         const data = {
-            name: document.getElementById('name').value,
+            appId: appId,
+            name: name,
+            ipa: document.getElementById('ipa_link').value, // This goes to DynamoDB
+            icon: document.getElementById('icon').value,
             category: document.getElementById('category').value,
             version: document.getElementById('version').value,
-            icon: document.getElementById('icon').value,
-            ipa: document.getElementById('plist_url').value
+            bundleId: "com.kurde." + appId // Automatically generated for the plist
         };
-        await fetch(`${API_URL}/add-app`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        alert("Published!");
-        loadAdminList();
+
+        try {
+            const res = await fetch(`${API_URL}/add-app`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                alert("Successfully added to KurdeStore_Apps!");
+                document.getElementById('appForm').reset();
+                document.getElementById('version').value = "1.0";
+                loadAdminList();
+            } else {
+                alert("Failed to save. Check your Lambda logs.");
+            }
+        } catch (err) {
+            alert("Connection Error.");
+        } finally {
+            btn.innerText = "Publish to Store";
+            btn.disabled = false;
+        }
     };
 
     async function loadAdminList() {
-        const res = await fetch(`${API_URL}/get-apps`);
-        const items = await res.json();
-        const listDiv = document.getElementById('admin-list');
-        listDiv.innerHTML = items.map(item => `
-            <div class="admin-item">
-                <img src="${item.icon}">
-                <div style="flex-grow:1">
-                    <div><b>${item.name}</b></div>
-                    <small style="color:gray">${item.category}</small>
-                </div>
-                <button class="btn-red" onclick="deleteApp('${item.appId}')">Delete</button>
-            </div>`).join('');
+        try {
+            const res = await fetch(`${API_URL}/get-apps`);
+            const items = await res.json();
+            const listDiv = document.getElementById('admin-list');
+            
+            listDiv.innerHTML = items.map(item => `
+                <div class="admin-item">
+                    <img src="${item.icon}" onerror="this.src='https://via.placeholder.com/45'">
+                    <div style="flex-grow:1">
+                        <div><b>${item.name}</b></div>
+                        <small style="color:gray">${item.category} • v${item.version}</small>
+                    </div>
+                    <button class="btn-red" onclick="deleteApp('${item.appId}')">Delete</button>
+                </div>`).join('');
+        } catch (err) {
+            document.getElementById('admin-list').innerText = "Error loading apps.";
+        }
     }
 
     async function deleteApp(id) {
-        if(!confirm("Delete?")) return;
+        if(!confirm("Delete this app?")) return;
         await fetch(`${API_URL}/delete-app`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
