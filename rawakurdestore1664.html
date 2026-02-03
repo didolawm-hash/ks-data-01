@@ -42,8 +42,8 @@
             
             <hr style="border: 0.5px solid #3a3a3c; margin: 25px 0;">
 
-            <label>3. Final Plist URL (After Uploading to /plist/)</label>
-            <input type="text" id="plist_url" placeholder="https://kurde.store/plist/file.plist" required>
+            <label>3. Final Plist URL (After Uploading to /plists/)</label>
+            <input type="text" id="plist_url" placeholder="https://kurde.store/plists/file.plist" required>
 
             <label>4. Icon URL (From /assets/)</label>
             <input type="text" id="icon" placeholder="https://kurde.store/assets/icon.png">
@@ -60,7 +60,6 @@
 
     <div class="box">
         <h2>Live Management</h2>
-        <input type="text" id="adminSearch" placeholder="Search apps...">
         <div id="admin-list" style="margin-top:20px;">Loading database...</div>
     </div>
 </div>
@@ -68,7 +67,7 @@
 <script>
     const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
     
-    // CHANGE THIS: Your SHA-256 Hashed Password
+    // Updated Hash for password: didoxrawa2027
     const MASTER_HASH = "7141569426f4f346808794c48972e0941865239a9c402128b9658253a817684f"; 
 
     async function checkPass() {
@@ -92,7 +91,7 @@
         const ipa = document.getElementById('ipa_direct').value;
         if(!name || !ipa) return alert("Fill Name and IPA link!");
 
-        const plist = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>com.kurde.${name.toLowerCase().replace(/\s/g, '')}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
+        const plist = `<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipa}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>com.kurde.${name.toLowerCase().replace(/\\s/g, '')}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
         
         document.getElementById('plistCode').innerText = plist;
         document.getElementById('plistPreview').style.display = "block";
@@ -101,7 +100,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${name.toLowerCase().replace(/\s/g, '_')}.plist`;
+        a.download = `${name.toLowerCase().replace(/\\s/g, '_')}.plist`;
         a.click();
     }
 
@@ -112,8 +111,7 @@
             category: document.getElementById('category').value,
             version: document.getElementById('version').value,
             icon: document.getElementById('icon').value,
-            ipa: document.getElementById('plist_url').value,
-            size: document.getElementById('size').value
+            ipa: document.getElementById('plist_url').value
         };
         await fetch(`${API_URL}/add-app`, {
             method: 'POST',
