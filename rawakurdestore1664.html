@@ -2,116 +2,158 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Kurde Store - Admin Panel</title>
+    <title>Kurde Store - Admin Panel & Plist Gen</title>
     <style>
         body { font-family: -apple-system, sans-serif; background: #1c1c1e; color: white; padding: 20px; }
-        .container { max-width: 600px; margin: auto; background: #2c2c2e; padding: 30px; border-radius: 20px; border: 1px solid #3a3a3c; }
-        h1 { font-size: 24px; margin-bottom: 20px; color: #0a84ff; }
-        label { display: block; margin-top: 15px; color: #8e8e93; font-size: 14px; }
-        input, select, textarea { width: 100%; padding: 12px; margin-top: 5px; border-radius: 10px; border: 1px solid #3a3a3c; background: #1c1c1e; color: white; box-sizing: border-box; }
-        .btn-save { background: #30d158; color: white; border: none; padding: 15px; width: 100%; border-radius: 12px; font-weight: bold; margin-top: 25px; cursor: pointer; }
-        
-        .manage-section { margin-top: 40px; border-top: 1px solid #3a3a3c; padding-top: 20px; }
-        #adminSearch { margin-bottom: 20px; border: 1px solid #0a84ff; }
-        
-        .admin-item { display: flex; align-items: center; background: #1c1c1e; padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 0.5px solid #3a3a3c; }
-        .admin-item img { width: 45px; height: 45px; border-radius: 10px; margin-right: 15px; }
-        .admin-item-info { flex-grow: 1; }
-        .btn-delete { background: #ff3b30; color: white; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .container { max-width: 800px; margin: auto; display: flex; gap: 20px; }
+        .box { background: #2c2c2e; padding: 25px; border-radius: 20px; border: 1px solid #3a3a3c; flex: 1; }
+        h1, h2 { color: #0a84ff; margin-top: 0; }
+        label { display: block; margin-top: 10px; color: #8e8e93; font-size: 12px; }
+        input, select, textarea { width: 100%; padding: 10px; margin-top: 5px; border-radius: 8px; border: 1px solid #3a3a3c; background: #1c1c1e; color: white; box-sizing: border-box; }
+        .btn { padding: 12px; border-radius: 10px; border: none; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; }
+        .btn-blue { background: #0a84ff; color: white; }
+        .btn-green { background: #30d158; color: white; }
+        .btn-red { background: #ff3b30; color: white; padding: 5px; font-size: 11px; width: auto; }
+        pre { background: #1c1c1e; padding: 10px; border-radius: 10px; font-size: 11px; overflow-x: auto; color: #30d158; border: 1px solid #3a3a3c; max-height: 200px; }
+        .admin-item { display: flex; align-items: center; background: #1c1c1e; padding: 10px; border-radius: 10px; margin-bottom: 8px; border: 0.5px solid #3a3a3c; }
+        .admin-item img { width: 40px; height: 40px; border-radius: 8px; margin-right: 12px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Add New App/Game</h1>
+
+<div class="container">
+    <div class="box">
+        <h1>Add New App</h1>
         <form id="appForm">
             <label>App Name</label>
-            <input type="text" id="name" placeholder="e.g. Screen Mirror Pro" required>
+            <input type="text" id="name" placeholder="Minecraft" required>
+            
+            <label>Direct IPA Link (AWS S3 URL)</label>
+            <input type="text" id="ipa_direct" placeholder="https://bucket.s3.amazonaws.com/game.ipa" required>
+            
+            <label>Bundle ID (e.g., com.kurde.game)</label>
+            <input type="text" id="bundle" placeholder="com.kurde.app">
+
+            <label>Final Plist URL (The link you will upload to GitHub/S3)</label>
+            <input type="text" id="plist_url" placeholder="Paste link here AFTER you upload the plist" required>
+
             <div style="display:flex; gap:10px;">
-                <div style="flex:1">
-                    <label>Category</label>
-                    <select id="category"><option value="Apps">Apps</option><option value="Games">Games</option></select>
-                </div>
-                <div style="flex:1"><label>Version</label><input type="text" id="version" placeholder="1.0.2"></div>
+                <div style="flex:1"><label>Category</label><select id="category"><option>Apps</option><option>Games</option></select></div>
+                <div style="flex:1"><label>Version</label><input type="text" id="version" placeholder="1.0"></div>
             </div>
-            <label>Icon URL</label><input type="text" id="icon" placeholder="https://kurde.store/icon.png">
-            <label>Plist URL</label><input type="text" id="ipa" placeholder="https://kurde.store/plist/app.plist" required>
-            <label>Size (MB)</label><input type="number" id="size" placeholder="100">
-            <label>Description</label><textarea id="desc" rows="3"></textarea>
-            <button type="submit" class="btn-save">PUBLISH TO STORE</button>
+            
+            <label>Icon URL</label><input type="text" id="icon">
+            <label>Size (MB)</label><input type="number" id="size">
+
+            <button type="button" class="btn btn-blue" onclick="generatePlist()">1. GENERATE PLIST CODE</button>
+            <button type="submit" class="btn btn-green">2. PUBLISH TO STORE</button>
         </form>
 
-        <div class="manage-section">
-            <h2>Manage Live Apps</h2>
-            <input type="text" id="adminSearch" placeholder="Search live apps to delete...">
-            <div id="admin-list">Loading apps...</div>
+        <div id="plistOutput" style="display:none; margin-top:20px;">
+            <h2>Your Plist Code</h2>
+            <p style="font-size: 11px; color: #8e8e93;">Copy this, save as <b>app.plist</b>, upload it, then paste the link above.</p>
+            <pre id="plistCode"></pre>
+            <button class="btn btn-blue" onclick="copyPlist()">Copy Code</button>
         </div>
     </div>
 
-    <script>
-        const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
+    <div class="box">
+        <h2>Live Store Management</h2>
+        <input type="text" id="adminSearch" placeholder="Search apps...">
+        <div id="admin-list" style="margin-top:15px;"></div>
+    </div>
+</div>
 
-        // 1. ADD APP
-        document.getElementById('appForm').onsubmit = async (e) => {
-            e.preventDefault();
-            const data = {
-                name: document.getElementById('name').value,
-                category: document.getElementById('category').value,
-                version: document.getElementById('version').value,
-                icon: document.getElementById('icon').value,
-                ipa: document.getElementById('ipa').value,
-                size: document.getElementById('size').value,
-                desc: document.getElementById('desc').value
-            };
-            await fetch(`${API_URL}/add-app`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
-            alert("App Published Successfully!");
-            document.getElementById('appForm').reset();
-            loadAdminList();
+<script>
+    const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
+
+    // GENERATE PLIST CODE
+    function generatePlist() {
+        const name = document.getElementById('name').value;
+        const ipa = document.getElementById('ipa_direct').value;
+        const bundle = document.getElementById('bundle').value || "com.kurde.store";
+        const version = document.getElementById('version').value || "1.0";
+
+        if(!name || !ipa) return alert("Please fill App Name and Direct IPA Link first!");
+
+        const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>items</key>
+    <array>
+        <dict>
+            <key>assets</key>
+            <array>
+                <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>${ipa}</string>
+                </dict>
+            </array>
+            <key>metadata</key>
+            <dict>
+                <key>bundle-identifier</key>
+                <string>${bundle}</string>
+                <key>bundle-version</key>
+                <string>${version}</string>
+                <key>kind</key>
+                <string>software</string>
+                <key>title</key>
+                <string>${name}</string>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>`;
+
+        document.getElementById('plistCode').innerText = plist;
+        document.getElementById('plistOutput').style.display = "block";
+    }
+
+    function copyPlist() {
+        const code = document.getElementById('plistCode').innerText;
+        navigator.clipboard.writeText(code);
+        alert("Plist code copied to clipboard!");
+    }
+
+    // PUBLISH FUNCTION
+    document.getElementById('appForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const data = {
+            name: document.getElementById('name').value,
+            category: document.getElementById('category').value,
+            version: document.getElementById('version').value,
+            icon: document.getElementById('icon').value,
+            ipa: document.getElementById('plist_url').value, // This is the Plist link
+            size: document.getElementById('size').value
         };
-
-        // 2. LOAD LIST
-        async function loadAdminList() {
-            const listDiv = document.getElementById('admin-list');
-            const res = await fetch(`${API_URL}/get-apps`);
-            const items = await res.json();
-            listDiv.innerHTML = '';
-            items.forEach(item => {
-                listDiv.innerHTML += `
-                    <div class="admin-item">
-                        <img src="${item.icon || 'https://kurde.store/assets/default-icon.png'}">
-                        <div class="admin-item-info">
-                            <div style="font-weight:bold">${item.name}</div>
-                            <small style="color:gray">${item.category} • v${item.version}</small>
-                        </div>
-                        <button class="btn-delete" onclick="deleteApp('${item.appId}')">Delete</button>
-                    </div>`;
-            });
-        }
-
-        // 3. DELETE APP
-        async function deleteApp(id) {
-            if(!confirm("Are you sure? This will remove the app from the store.")) return;
-            await fetch(`${API_URL}/delete-app`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-            loadAdminList();
-        }
-
-        // 4. ADMIN SEARCH LOGIC
-        document.getElementById('adminSearch').addEventListener('keyup', function() {
-            let filter = this.value.toLowerCase();
-            document.querySelectorAll('.admin-item').forEach(item => {
-                let name = item.querySelector('.admin-item-info div').innerText.toLowerCase();
-                item.style.display = name.includes(filter) ? "flex" : "none";
-            });
-        });
-
+        await fetch(`${API_URL}/add-app`, { method: 'POST', body: JSON.stringify(data) });
+        alert("App Published!");
         loadAdminList();
-    </script>
+    };
+
+    async function loadAdminList() {
+        const res = await fetch(`${API_URL}/get-apps`);
+        const items = await res.json();
+        const listDiv = document.getElementById('admin-list');
+        listDiv.innerHTML = items.map(item => `
+            <div class="admin-item">
+                <img src="${item.icon}">
+                <div style="flex-grow:1"><b>${item.name}</b></div>
+                <button class="btn-red" onclick="deleteApp('${item.appId}')">Delete</button>
+            </div>
+        `).join('');
+    }
+
+    async function deleteApp(id) {
+        if(!confirm("Delete?")) return;
+        await fetch(`${API_URL}/delete-app`, { method: 'POST', body: JSON.stringify({id: id}) });
+        loadAdminList();
+    }
+
+    loadAdminList();
+</script>
 </body>
 </html>
