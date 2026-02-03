@@ -5,16 +5,17 @@
     <key>PayloadContent</key>
     <dict>
         <key>URL</key>
-        <string>https://7or1wt2kad.execute-api.eu-west-2.amazonaws.com/</string>
+        <string>https://7or1wt2kad.execute-api.eu-west-2.amazonaws.com</string>
         <key>DeviceAttributes</key>
         <array>
             <string>UDID</string>
             <string>PRODUCT</string>
             <string>VERSION</string>
+            <string>SERIAL</string>
         </array>
     </dict>
     <key>PayloadOrganization</key>
-    <string>My App Store</string>
+    <string>My Store</string>
     <key>PayloadDisplayName</key>
     <string>Device Registration</string>
     <key>PayloadVersion</key>
@@ -22,8 +23,8 @@
     <key>PayloadType</key>
     <string>Configuration</string>
     <key>PayloadIdentifier</key>
-    <string>com.mystore.profile</string>
+    <string>com.mystore.profile-service</string>
     <key>PayloadUUID</key>
-    <string>86753091-1234-5678-9101-112131415161</string>
+    <string>58204E94-6881-4C53-A000-8A18E6E920A2</string>
 </dict>
 </plist>
