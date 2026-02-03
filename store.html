@@ -7,23 +7,14 @@
     <style>
         :root { --ios-blue: #007aff; --ios-gray: #8e8e93; --ios-bg: #f2f2f7; }
         body { font-family: -apple-system, sans-serif; background-color: var(--ios-bg); margin: 0; padding-bottom: 50px; display: none; }
-        
-        /* iOS Header Style */
         .header { background: white; padding: 40px 20px 20px; border-bottom: 1px solid #d1d1d6; }
         .header h1 { font-size: 34px; margin: 0; font-weight: 700; }
         #date-today { color: var(--ios-gray); margin: 5px 0 0; font-size: 13px; text-transform: uppercase; }
-
-        /* Featured Slider */
         .featured-container { padding: 20px 15px; overflow-x: auto; display: flex; gap: 15px; scroll-snap-type: x mandatory; }
-        .featured-card { min-width: 85%; height: 200px; background: linear-gradient(135deg, #007aff, #5856d6); border-radius: 14px; color: white; padding: 20px; scroll-snap-align: start; flex-shrink: 0; }
-        .featured-card h3 { margin: 0; font-size: 24px; }
-
+        .featured-card { min-width: 85%; height: 160px; background: linear-gradient(135deg, #007aff, #5856d6); border-radius: 14px; color: white; padding: 20px; scroll-snap-align: start; flex-shrink: 0; }
         .search-container { padding: 15px; }
         .search-bar { width: 100%; padding: 12px; border-radius: 12px; border: none; background: #e3e3e8; font-size: 16px; outline: none; box-sizing: border-box; }
-
         .section-title { padding: 20px 20px 10px; font-size: 22px; font-weight: 700; color: #1c1c1e; }
-
-        /* App Item Styles */
         .app-list { background: white; margin: 0 15px; border-radius: 14px; padding: 0 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .app-item { display: flex; align-items: center; padding: 15px 0; border-bottom: 0.5px solid #d1d1d6; }
         .app-item:last-child { border-bottom: none; }
@@ -31,11 +22,8 @@
         .app-info { flex-grow: 1; }
         .app-name { font-weight: 600; font-size: 17px; margin-bottom: 2px; color: #000; }
         .app-sub { font-size: 12px; color: var(--ios-gray); }
-        
-        .get-btn { background: #f0f0f5; color: var(--ios-blue); padding: 6px 22px; border-radius: 20px; font-weight: 700; text-decoration: none; font-size: 14px; transition: 0.2s; border: none; cursor: pointer; }
-        .get-btn:active { background: #d1d1d6; }
-
-        #device-info { padding: 15px 20px; font-size: 11px; color: var(--ios-gray); word-break: break-all; text-align: center; }
+        .get-btn { background: #f0f0f5; color: var(--ios-blue); padding: 6px 22px; border-radius: 20px; font-weight: 700; border: none; font-size: 14px; cursor: pointer; }
+        #device-info { padding: 20px; font-size: 11px; color: var(--ios-gray); text-align: center; }
     </style>
 </head>
 <body>
@@ -47,9 +35,9 @@
 
     <div class="featured-container">
         <div class="featured-card">
-            <p style="opacity: 0.8; margin: 0;">FEATURED</p>
-            <h3>Screen Mirror Pro</h3>
-            <p>Premium experience for Kurde Store members.</p>
+            <p style="opacity: 0.8; margin: 0; font-size: 12px;">WELCOME BACK</p>
+            <h3>Member Area</h3>
+            <p>Enjoy premium apps and games without revokes.</p>
         </div>
     </div>
 
@@ -58,25 +46,18 @@
     </div>
 
     <div class="section-title">Applications</div>
-    <div class="app-list" id="apps-list">
-        <div style="padding: 20px; text-align: center; color: gray;">Loading Apps...</div>
-    </div>
+    <div class="app-list" id="apps-list"></div>
 
     <div class="section-title">Games</div>
-    <div class="app-list" id="games-list">
-        <div style="padding: 20px; text-align: center; color: gray;">Loading Games...</div>
-    </div>
+    <div class="app-list" id="games-list"></div>
 
     <div id="device-info"></div>
 
     <script>
-        // REPLACE WITH YOUR ACTUAL API INVOKE URL
-        const API_URL = "https://your-api-id.execute-api.region.amazonaws.com"; 
-        
+        const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
 
-        // 1. VERIFY ACCESS & LOAD DATA
         async function initStore() {
             if (!udid) {
                 window.location.href = "index.html";
@@ -84,32 +65,27 @@
             }
 
             try {
-                // Auth Check
                 const authRes = await fetch(`https://api.kurde.store?udid=${udid}`);
                 const authData = await authRes.json();
                 
-                // (Timer Logic Omitted for brevity - same as your old code)
+                // Add your 72h timer logic here if needed
                 document.body.style.display = "block";
                 document.getElementById('date-today').innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-                document.getElementById('device-info').innerText = "Logged in as: " + udid;
+                document.getElementById('device-info').innerText = "UDID: " + udid;
 
-                // Load Dynamic Content
                 loadApps();
-
             } catch (err) {
-                console.error("Store Error:", err);
+                console.error("Auth failed:", err);
             }
         }
 
-        // 2. FETCH APPS FROM AWS
         async function loadApps() {
-            const appsList = document.getElementById('apps-list');
-            const gamesList = document.getElementById('games-list');
-
             try {
                 const response = await fetch(`${API_URL}/get-apps`);
                 const items = await response.json();
 
+                const appsList = document.getElementById('apps-list');
+                const gamesList = document.getElementById('games-list');
                 appsList.innerHTML = '';
                 gamesList.innerHTML = '';
 
@@ -119,41 +95,33 @@
                             <img src="${item.icon}" class="app-icon">
                             <div class="app-info">
                                 <div class="app-name">${item.name}</div>
-                                <div class="app-sub">v${item.version} • ${item.size}MB • ${item.downloads} Users</div>
+                                <div class="app-sub">v${item.version} • ${item.size}MB • ${item.downloads || 0} Users</div>
                             </div>
                             <button onclick="installApp('${item.appId}', '${item.ipa}')" class="get-btn">GET</button>
                         </div>
                     `;
-
-                    if (item.category === "Games") {
-                        gamesList.innerHTML += html;
-                    } else {
-                        appsList.innerHTML += html;
-                    }
+                    if (item.category === "Games") gamesList.innerHTML += html;
+                    else appsList.innerHTML += html;
                 });
             } catch (err) {
-                appsList.innerHTML = '<p style="color:red; padding:10px;">Error loading database.</p>';
+                console.error("Load failed:", err);
             }
         }
 
-        // 3. HANDLE INSTALL & DOWNLOAD COUNTER
         async function installApp(id, ipaUrl) {
-            // Increment the counter on AWS
-            fetch(`${https://wgcdclia51.execute-api.eu-west-2.amazonaws.com/default}/download`, {
+            // Count download
+            fetch(`${API_URL}/download`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ id: id })
             });
-
-            // Trigger iOS Install (Assumes ipaUrl is the full manifest .plist link)
+            // Redirect to iOS install
             window.location.href = `itms-services://?action=download-manifest&url=${ipaUrl}`;
         }
 
-        // 4. SEARCH ENGINE
         document.getElementById('searchInput').addEventListener('keyup', function() {
             let filter = this.value.toLowerCase();
-            let items = document.querySelectorAll('.app-item');
-            items.forEach(item => {
+            document.querySelectorAll('.app-item').forEach(item => {
                 let text = item.querySelector('.app-name').innerText.toLowerCase();
                 item.style.display = text.includes(filter) ? "flex" : "none";
             });
