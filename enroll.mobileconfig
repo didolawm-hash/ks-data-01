@@ -5,7 +5,7 @@
     <key>PayloadContent</key>
     <dict>
         <key>URL</key>
-        <string>https://7or1wt2kad.execute-api.eu-west-2.amazonaws.com</string>
+        <string>https://api.kurde.store</string>
         <key>DeviceAttributes</key>
         <array>
             <string>UDID</string>
