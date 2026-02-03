@@ -6,8 +6,7 @@
     <title>Kurde Store - Member Area</title>
     <style>
         :root { --ios-blue: #007aff; --ios-gray: #8e8e93; --ios-bg: #f2f2f7; }
-        /* Changed display to block by default for admin testing, 
-           the script will hide it for unauthorized users */
+        /* Hidden by default for security */
         body { font-family: -apple-system, sans-serif; background-color: var(--ios-bg); margin: 0; padding-bottom: 50px; display: none; }
         
         .header { background: white; padding: 40px 20px 20px; border-bottom: 1px solid #d1d1d6; }
@@ -64,46 +63,48 @@
     <div id="device-info"></div>
 
     <script>
-        // Use your full AWS path
+        // 1. CONSTANTS
         const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com/KurdeStore_Manager";
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
-        const isAdmin = urlParams.get('admin') === 'true'; // Admin bypass check
+        const isAdmin = urlParams.get('admin') === 'true';
+
+        // 2. IMMEDIATE ADMIN BYPASS
+        // We run this BEFORE anything else to prevent redirects
+        if (isAdmin) {
+            document.body.style.display = "block";
+            document.getElementById('date-today').innerText = "ADMIN ACCESS";
+            console.log("Admin Bypass Active");
+        }
 
         async function initStore() {
-            // 1. ADMIN BYPASS
             if (isAdmin) {
-                document.body.style.display = "block";
-                document.getElementById('date-today').innerText = "Admin Access Mode";
-                loadApps();
+                await loadApps();
                 return;
             }
 
-            // 2. REGULAR USER CHECK
             if (!udid) {
-                window.location.href = "index.html";
+                window.location.replace("index.html");
                 return;
             }
 
             try {
-                // Changed from api.kurde.store to your actual AWS endpoint
                 const authRes = await fetch(`${API_URL}/get-user?udid=${udid}`);
+                if (!authRes.ok) throw new Error("Auth Server Error");
+                
                 const userData = await authRes.json();
                 
-                // If user is paid and 72h passed (we already bypassed time in DynamoDB)
                 if (userData && (userData.status === 'paid' || userData.isPaid === true)) {
                     document.body.style.display = "block";
                     document.getElementById('date-today').innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
                     document.getElementById('device-info').innerText = "UDID: " + udid;
-                    loadApps();
+                    await loadApps();
                 } else {
-                    alert("Unauthorized or Processing. Please wait.");
-                    window.location.href = "index.html";
+                    window.location.replace("index.html");
                 }
             } catch (err) {
                 console.error("Auth failed:", err);
-                // If API fails, we redirect to be safe
-                window.location.href = "index.html";
+                window.location.replace("index.html");
             }
         }
 
@@ -117,13 +118,15 @@
                 appsList.innerHTML = '';
                 gamesList.innerHTML = '';
 
+                if (!Array.isArray(items)) return;
+
                 items.forEach(item => {
                     const html = `
                         <div class="app-item">
                             <img src="${item.icon}" class="app-icon" onerror="this.src='https://via.placeholder.com/60'">
                             <div class="app-info">
                                 <div class="app-name">${item.name}</div>
-                                <div class="app-sub">v${item.version || '1.0'} • ${item.size || '??'}MB</div>
+                                <div class="app-sub">v${item.version || '1.0'}</div>
                             </div>
                             <button onclick="installApp('${item.appId}', '${item.ipa}')" class="get-btn">GET</button>
                         </div>
@@ -136,12 +139,8 @@
             }
         }
 
-        async function installApp(id, ipaUrl) {
-            fetch(`${API_URL}/download`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
+        function installApp(id, ipaUrl) {
+            // itms-services redirect
             window.location.href = `itms-services://?action=download-manifest&url=${ipaUrl}`;
         }
 
@@ -170,7 +169,8 @@
             document.getElementById('no-results').style.display = anyVisible ? "none" : "block";
         });
 
-        initStore();
+        // Run on load
+        window.onload = initStore;
     </script>
 </body>
 </html>
