@@ -7,17 +7,11 @@
     <style>
         :root { --ios-blue: #007aff; --ios-gray: #8e8e93; --ios-bg: #f2f2f7; }
         body { font-family: -apple-system, sans-serif; background-color: var(--ios-bg); margin: 0; padding-bottom: 50px; display: none; }
-        
         .header { background: white; padding: 40px 20px 20px; border-bottom: 1px solid #d1d1d6; }
         .header h1 { font-size: 34px; margin: 0; font-weight: 700; }
         #date-today { color: var(--ios-gray); margin: 5px 0 0; font-size: 13px; text-transform: uppercase; }
-
         .search-container { padding: 10px 15px; position: sticky; top: 0; background: var(--ios-bg); z-index: 100; border-bottom: 0.5px solid #d1d1d6; }
         .search-bar { width: 100%; padding: 12px; border-radius: 12px; border: none; background: #e3e3e8; font-size: 16px; outline: none; box-sizing: border-box; }
-
-        .featured-container { padding: 20px 15px; overflow-x: auto; display: flex; gap: 15px; scroll-snap-type: x mandatory; }
-        .featured-card { min-width: 85%; height: 160px; background: linear-gradient(135deg, #007aff, #5856d6); border-radius: 14px; color: white; padding: 20px; scroll-snap-align: start; flex-shrink: 0; }
-        
         .section-title { padding: 20px 20px 10px; font-size: 22px; font-weight: 700; color: #1c1c1e; }
         .app-list { background: white; margin: 0 15px; border-radius: 14px; padding: 0 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .app-item { display: flex; align-items: center; padding: 15px 0; border-bottom: 0.5px solid #d1d1d6; }
@@ -27,90 +21,48 @@
         .app-name { font-weight: 600; font-size: 17px; margin-bottom: 2px; color: #000; }
         .app-sub { font-size: 12px; color: var(--ios-gray); }
         .get-btn { background: #f0f0f5; color: var(--ios-blue); padding: 6px 22px; border-radius: 20px; font-weight: 700; border: none; font-size: 14px; cursor: pointer; }
-        
-        #device-info { padding: 20px; font-size: 11px; color: var(--ios-gray); text-align: center; }
-        #no-results { display: none; text-align: center; padding: 20px; color: var(--ios-gray); }
     </style>
 </head>
 <body>
-
     <div class="header">
         <p id="date-today"></p>
         <h1>Kurde Store</h1>
     </div>
-
-    <div class="featured-container">
-        <div class="featured-card">
-            <p style="opacity: 0.8; margin: 0; font-size: 12px;">WELCOME BACK</p>
-            <h3>Member Area</h3>
-            <p>Enjoy premium apps and games without revokes.</p>
-        </div>
-    </div>
-
     <div class="search-container">
-        <input type="text" id="searchInput" class="search-bar" placeholder="Search Apps & Games...">
+        <input type="text" id="searchInput" class="search-bar" placeholder="Search Apps...">
     </div>
-
-    <div id="no-results">No apps found matching your search.</div>
-
     <div class="section-title">Applications</div>
     <div class="app-list" id="apps-list"></div>
-
     <div class="section-title">Games</div>
     <div class="app-list" id="games-list"></div>
 
-    <div id="device-info"></div>
-
     <script>
-        // Use your base AWS URL (without the stage name if using default HTTP API)
         const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
         const isAdmin = urlParams.get('admin') === 'true';
 
-        if (isAdmin) {
-            document.body.style.display = "block";
-            document.getElementById('date-today').innerText = "ADMIN ACCESS";
-        }
-
         async function initStore() {
-            if (isAdmin) { await loadApps(); return; }
-            if (!udid) { window.location.replace("index.html"); return; }
-
-            try {
-                // Adjusting the auth call to match your KurdeStore_Manager path
-                const authRes = await fetch(`${API_URL}/KurdeStore_Manager/get-user?udid=${udid}`);
-                const userData = await authRes.json();
-                
-                if (userData && (userData.status === 'paid' || userData.isPaid === true)) {
-                    document.body.style.display = "block";
-                    document.getElementById('date-today').innerText = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-                    document.getElementById('device-info').innerText = "UDID: " + udid;
-                    await loadApps();
-                } else {
-                    window.location.replace("index.html");
-                }
-            } catch (err) {
+            if (isAdmin || udid) {
+                document.body.style.display = "block";
+                document.getElementById('date-today').innerText = new Date().toLocaleDateString();
+                await loadApps();
+            } else {
                 window.location.replace("index.html");
             }
         }
 
         async function loadApps() {
             try {
-                const response = await fetch(`${API_URL}/KurdeStore_Manager/get-apps`);
+                const response = await fetch(`${API_URL}/get-apps`);
                 const items = await response.json();
-
                 const appsList = document.getElementById('apps-list');
                 const gamesList = document.getElementById('games-list');
-                appsList.innerHTML = '';
-                gamesList.innerHTML = '';
-
-                if (!Array.isArray(items)) return;
 
                 items.forEach(item => {
-                    // DYNAMIC PLIST LOGIC: Point to your /plist route
-                    const dynamicPlistUrl = `${API_URL}/plist?appId=${item.appId}`;
-                    const installLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(dynamicPlistUrl)}`;
+                    // This generates the dynamic plist link using your Lambda route
+                    const plistUrl = `${API_URL}/plist?appId=${item.appId}`;
+                    const itmsLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(plistUrl)}`;
 
                     const html = `
                         <div class="app-item">
@@ -119,26 +71,13 @@
                                 <div class="app-name">${item.name}</div>
                                 <div class="app-sub">v${item.version || '1.0'}</div>
                             </div>
-                            <button onclick="window.location.href='${installLink}'" class="get-btn">GET</button>
-                        </div>
-                    `;
+                            <button onclick="window.location.href='${itmsLink}'" class="get-btn">GET</button>
+                        </div>`;
                     if (item.category === "Games") gamesList.innerHTML += html;
                     else appsList.innerHTML += html;
                 });
-            } catch (err) {
-                console.error("Load failed:", err);
-            }
+            } catch (err) { console.error(err); }
         }
-
-        // Search Logic
-        document.getElementById('searchInput').addEventListener('input', function() {
-            let filter = this.value.toLowerCase();
-            document.querySelectorAll('.app-item').forEach(item => {
-                let text = item.querySelector('.app-name').innerText.toLowerCase();
-                item.style.display = text.includes(filter) ? "flex" : "none";
-            });
-        });
-
         window.onload = initStore;
     </script>
 </body>
