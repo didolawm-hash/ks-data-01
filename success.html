@@ -1,29 +1,70 @@
-const urlParams = new URLSearchParams(window.location.search);
-const udid = urlParams.get('udid');
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Registration Status</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #f2f2f7; }
+        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
+        .btn { display: inline-block; background: #007aff; color: white; padding: 15px 25px; border-radius: 10px; text-decoration: none; font-weight: bold; margin-top: 20px; }
+        #udidDisplay { font-size: 12px; color: #666; word-break: break-all; margin-top: 10px; }
+    </style>
+</head>
+<body>
 
-async function checkStatus() {
-    const response = await fetch(`https://api.kurde.store?udid=${udid}`);
-    const data = await response.json();
+    <div class="card">
+        <h1>Kurde Store</h1>
+        <div id="statusBox">Checking status...</div>
+        <div id="udidDisplay"></div>
+    </div>
 
-    const statusDiv = document.getElementById('statusBox');
-    const now = Date.now();
-    const waitTime = 72 * 60 * 60 * 1000; // 72 hours in milliseconds
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const udid = urlParams.get('udid');
 
-    if (data.status === "pending") {
-        const timeLeft = waitTime - (now - data.reg_date);
-        if (timeLeft > 0) {
-            const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-            statusDiv.innerHTML = `
-                <div style="color: orange;">Status: Processing</div>
-                <p>Apple is registering your device. Please wait <b>${hours} hours</b> more.</p>
-                <p>The install button will appear once active.</p>
-            `;
-        } else {
-            statusDiv.innerHTML = `
-                <div style="color: green;">Status: Active</div>
-                <a href="install-app.mobileconfig" class="btn">Install Kurde Store App</a>
-            `;
+        async function checkStatus() {
+            if (!udid) {
+                document.getElementById('statusBox').innerHTML = "No UDID found. Please register first.";
+                return;
+            }
+
+            document.getElementById('udidDisplay').innerText = "UDID: " + udid;
+
+            try {
+                const response = await fetch(`https://api.kurde.store?udid=${udid}`);
+                const data = await response.json();
+
+                const statusDiv = document.getElementById('statusBox');
+                const now = Date.now();
+                const waitTime = 72 * 60 * 60 * 1000; // 72 hours
+
+                if (data.status === "pending") {
+                    const timeLeft = waitTime - (now - data.reg_date);
+                    
+                    if (timeLeft > 0) {
+                        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        statusDiv.innerHTML = `
+                            <h2 style="color: orange;">Status: Processing</h2>
+                            <p>Apple is registering your device. Please wait <b>${hours} hours</b> more.</p>
+                            <p>The install button will appear once active.</p>
+                        `;
+                    } else {
+                        statusDiv.innerHTML = `
+                            <h2 style="color: green;">Status: Active</h2>
+                            <a href="install-app.mobileconfig" class="btn">Install Kurde Store App</a>
+                        `;
+                    }
+                } else {
+                    statusDiv.innerHTML = "Status: Not Registered or Processing.";
+                }
+            } catch (error) {
+                console.error("Error:", error);
+                document.getElementById('statusBox').innerHTML = "Error connecting to server.";
+            }
         }
-    }
-}
-checkStatus();
+
+        checkStatus();
+    </script>
+</body>
+</html>
