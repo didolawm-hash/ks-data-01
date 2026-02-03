@@ -2,24 +2,30 @@
 <html>
 <head>
     <title>Registration Success</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        body { font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #f0f0f5; }
-        .card { background: white; padding: 30px; border-radius: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); display: inline-block; }
-        .udid { font-weight: bold; color: #007aff; word-break: break-all; margin-top: 10px; }
+        body { font-family: -apple-system, sans-serif; text-align: center; padding: 50px; background: #f2f2f7; }
+        .card { background: white; padding: 30px; border-radius: 20px; shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .udid { font-family: monospace; background: #eee; padding: 10px; word-break: break-all; border-radius: 5px; }
+        .check { color: #34c759; font-size: 50px; }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>✅ Device Registered!</h1>
-        <p>Your UDID has been captured successfully:</p>
-        <div id="udid-display" class="udid">Loading...</div>
-        <p>You can now close this window and return to the app.</p>
+        <div class="check">✓</div>
+        <h1>Device Registered</h1>
+        <p>Your UDID has been captured:</p>
+        <p class="udid" id="udidDisplay">Loading...</p>
+        <p>You can now return to the store.</p>
     </div>
+
     <script>
-        // This script grabs the UDID from the URL (?udid=XXXX)
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
-        document.getElementById('udid-display').innerText = udid || "No UDID found";
+        if (udid) {
+            document.getElementById('udidDisplay').innerText = udid;
+        }
     </script>
 </body>
 </html>
