@@ -9,8 +9,9 @@
         .card { background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 450px; margin: auto; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #007aff; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn { display: inline-block; background: #007aff; color: white; padding: 16px 30px; border-radius: 14px; text-decoration: none; font-weight: 600; margin-top: 20px; transition: 0.2s; }
-        .btn-tg { background: #229ED9; } /* Telegram Blue */
+        .btn { display: inline-block; background: #007aff; color: white; padding: 16px 30px; border-radius: 14px; text-decoration: none; font-weight: 600; margin-top: 20px; transition: 0.2s; border: none; cursor: pointer; font-size: 16px; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .btn-tg { background: #229ED9; }
         #udid { font-size: 11px; color: #8e8e93; margin-top: 25px; word-break: break-all; border-top: 1px solid #eee; padding-top: 15px; }
         .status-tag { display: inline-block; padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .pending { background: #fff3cd; color: #856404; }
@@ -31,6 +32,45 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
+        
+        // UPDATE THIS: Use your Ngrok or Server URL
+        const BACKEND_API = "https://your-ngrok-url-here.ngrok-free.app"; 
+
+        async function startProvisioning() {
+            const btn = document.getElementById('installBtn');
+            const originalText = btn.innerText;
+            
+            btn.disabled = true;
+            btn.innerText = "Signing App... (10s)";
+
+            try {
+                const response = await fetch(`${BACKEND_API}/api/install`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        udid: udid,
+                        appName: "KurdeStore",
+                        ipaName: "KurdeStore",
+                        bundleId: "com.yourname.kurdestore", // Change to your actual bundle ID
+                        appVersion: "1.0.0"
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.installLink) {
+                    btn.innerText = "Click 'Install' on Popup";
+                    window.location.href = data.installLink;
+                } else {
+                    throw new Error("No install link received");
+                }
+            } catch (err) {
+                alert("Installation failed. Make sure the server is online.");
+                btn.disabled = false;
+                btn.innerText = originalText;
+                console.error(err);
+            }
+        }
 
         async function getStatus() {
             const statusBox = document.getElementById('statusBox');
@@ -45,7 +85,6 @@
             udidDiv.innerHTML = "<strong>Your Device UDID:</strong><br>" + udid;
 
             try {
-                // Fetch from your Lambda API
                 const response = await fetch(`https://api.kurde.store?udid=${udid}&t=${Date.now()}`);
                 const data = await response.json();
 
@@ -54,45 +93,38 @@
                     return;
                 }
 
-                // --- CASE 1: NOT PAID YET ---
                 if (data.isPaid === false) {
                     title.innerText = "Payment Required";
                     statusBox.innerHTML = `
                         <div class="status-tag pending">Status: Unpaid</div>
-                        <p>To register this device and start the 72-hour Apple process, please purchase a package.</p>
+                        <p>To register this device, please purchase a package.</p>
                         <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
-                        <p style="font-size: 12px; color: #666; margin-top: 15px;">Send your UDID to the admin after payment.</p>
                     `;
                 } 
-                // --- CASE 2: PAID, WAITING FOR APPLE (72 Hours) ---
                 else {
                     const seventyTwoHours = 72 * 60 * 60 * 1000;
-                    const now = Date.now();
-                    const timeLeft = seventyTwoHours - (now - data.reg_date);
+                    const timeLeft = seventyTwoHours - (Date.now() - data.reg_date);
 
                     if (timeLeft > 0) {
                         title.innerText = "Processing...";
                         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
                         statusBox.innerHTML = `
                             <div class="status-tag pending">Status: Apple Processing</div>
-                            <p>Your payment is verified! Apple is now activating your device.</p>
-                            <p><strong>Time Remaining: ~${hours} hours</strong></p>
-                            <p style="font-size: 13px; color: #666;">Check back on this page once the timer hits zero.</p>
+                            <p>Apple is activating your device (~${hours}h left).</p>
                         `;
                     } 
-                    // --- CASE 3: READY TO INSTALL ---
                     else {
+                        // --- CASE 3: READY TO INSTALL ---
                         title.innerText = "Device Active!";
                         statusBox.innerHTML = `
                             <div class="status-tag active">Status: Registered</div>
-                            <p>Your device is fully activated on Apple's servers.</p>
-                            <a href="https://kurde.store/store.html" class="btn">Open Kurde Store</a>
+                            <p>Your device is ready. Click below to sign and install the store.</p>
+                            <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                         `;
                     }
                 }
             } catch (err) {
-                statusBox.innerHTML = "<p>Connection error. Please refresh the page.</p>";
-                console.error(err);
+                statusBox.innerHTML = "<p>Connection error. Please refresh.</p>";
             }
         }
 
