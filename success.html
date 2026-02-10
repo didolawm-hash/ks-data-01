@@ -18,6 +18,7 @@
         .active { background: #d4edda; color: #155724; }
         .error-text { color: #ff3b30; font-size: 14px; margin-top: 10px; }
         .hidden { display: none; }
+        .progress-text { font-size: 12px; color: #007aff; margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -26,12 +27,12 @@
         <h2 id="title">Verifying...</h2>
         <div id="statusBox">
             <div class="loader"></div>
-            <p id="statusMsg">Connecting to secure API...</p>
+            <p id="statusMsg">Connecting to Kurde Store API...</p>
         </div>
         
         <div id="fallbackSection" class="hidden">
-            <p style="font-size: 13px; color: #666; margin-top: 15px;">If the popup didn't appear, click below:</p>
-            <a id="manualLink" href="#" class="btn" style="background: #5856d6;">Manual Install</a>
+            <p style="font-size: 13px; color: #666; margin-top: 15px;">If the installation popup didn't appear:</p>
+            <a id="manualLink" href="#" class="btn" style="background: #5856d6;">Click to Install Manually</a>
         </div>
 
         <div id="udid"></div>
@@ -40,14 +41,23 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
+        
+        // This should be your KurdeStore_Manager-API endpoint
         const BACKEND_API = "https://api.kurde.store"; 
 
         async function startProvisioning() {
             const btn = document.getElementById('installBtn');
-            const originalText = btn.innerText;
+            const statusBox = document.getElementById('statusBox');
+            const originalHTML = statusBox.innerHTML;
             
             btn.disabled = true;
-            btn.innerText = "Requesting... (10s)";
+            btn.innerText = "Signing App...";
+
+            // Update status UI to show progress
+            statusBox.innerHTML = `
+                <div class="loader"></div>
+                <p class="progress-text">zsign is preparing your personal build...<br>This takes 10-20 seconds.</p>
+            `;
 
             try {
                 const response = await fetch(`${BACKEND_API}`, { 
@@ -57,29 +67,36 @@
                     body: JSON.stringify({
                         action: "sign_app",
                         udid: udid,
-                        ipaName: "KurdeStore"
+                        appId: "KurdeStore" // Make sure this matches your DynamoDB appId
                     })
                 });
+
+                if (!response.ok) throw new Error("Server error during signing.");
 
                 const data = await response.json();
 
                 if (data.installLink) {
-                    btn.innerText = "Installing...";
+                    btn.innerText = "Check Home Screen";
                     
-                    // Show manual fallback button just in case
+                    // Show manual fallback in case auto-redirect fails
                     document.getElementById('fallbackSection').classList.remove('hidden');
                     document.getElementById('manualLink').href = data.installLink;
 
-                    // Trigger the system popup
-                    window.location.replace(data.installLink);
+                    // Trigger the iOS installation popup
+                    window.location.href = data.installLink;
                     
+                    statusBox.innerHTML = `
+                        <div class="status-tag active">Success!</div>
+                        <p>If prompted, click <b>Install</b>.<br>The app will appear on your home screen.</p>
+                    `;
                 } else {
-                    throw new Error("No install link received.");
+                    throw new Error("Signing completed but no link was provided.");
                 }
             } catch (err) {
-                alert("Error: " + err.message);
+                alert("Installation failed: " + err.message);
                 btn.disabled = false;
-                btn.innerText = originalText;
+                btn.innerText = "Try Again";
+                statusBox.innerHTML = originalHTML;
             }
         }
 
@@ -89,37 +106,48 @@
             const udidDiv = document.getElementById('udid');
 
             if (!udid) {
-                statusBox.innerHTML = "<b>No UDID detected.</b>";
+                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please start from the home page.";
                 return;
             }
 
             udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
             try {
+                // Check if user is paid/registered
                 const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
                 const data = await response.json();
 
                 if (data.isPaid === true) {
                     const seventyTwoHours = 72 * 60 * 60 * 1000;
-                    const timeLeft = seventyTwoHours - (Date.now() - (data.reg_date || 0));
+                    const registrationDate = data.reg_date || Date.now();
+                    const timeLeft = seventyTwoHours - (Date.now() - registrationDate);
 
                     if (timeLeft > 0) {
                         title.innerText = "Apple Processing";
-                        statusBox.innerHTML = `<div class="status-tag pending">Wait 72h</div><p>Activating your UDID...</p>`;
+                        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        statusBox.innerHTML = `
+                            <div class="status-tag pending">Wait 72 Hours</div>
+                            <p>Apple is currently activating your device.<br>Estimated time left: ~${hours}h</p>
+                        `;
                     } else {
                         title.innerText = "Device Ready!";
                         statusBox.innerHTML = `
                             <div class="status-tag active">Registered</div>
+                            <p>Your device is fully activated. You can now sign and install Kurde Store.</p>
                             <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                         `;
                     }
                 } else {
-                    title.innerText = "Unpaid";
-                    statusBox.innerHTML = `<a href="https://t.me/didolaw" class="btn btn-tg">Pay for Activation</a>`;
+                    title.innerText = "Activation Required";
+                    statusBox.innerHTML = `
+                        <div class="status-tag pending">Payment Not Found</div>
+                        <p>To use Kurde Store, your UDID must be registered.</p>
+                        <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
+                    `;
                 }
             } catch (err) {
-                title.innerText = "Offline";
-                statusBox.innerHTML = `<button class="btn" onclick="location.reload()">Retry</button>`;
+                title.innerText = "Connection Error";
+                statusBox.innerHTML = `<p class="error-text">API is currently unreachable.</p><button class="btn" onclick="location.reload()">Retry</button>`;
             }
         }
 
