@@ -45,14 +45,13 @@
 
             try {
                const response = await fetch(`${BACKEND_API}`, { 
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            action: "sign_app", // Add this so Lambda knows what to do
-            udid: udid,
-            ipaName: "KurdeStore"
-        })
-                        bundleId: "com.yourname.kurdestore", // Change to your actual bundle ID
+                       method: 'POST',
+                       headers: { 'Content-Type': 'application/json' },
+                       body: JSON.stringify({
+                       action: "sign_app", // Add this so Lambda knows what to do
+                       udid: udid,
+                       ipaName: "KurdeStore"
+                      bundleId: "com.yourname.kurdestore", // Change to your actual bundle ID
                         appVersion: "1.0.0"
                     })
                 });
