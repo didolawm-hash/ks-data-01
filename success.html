@@ -9,7 +9,7 @@
         .card { background: white; padding: 30px; border-radius: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); max-width: 450px; margin: auto; }
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #007aff; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 20px auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn { display: inline-block; background: #007aff; color: white; padding: 16px 30px; border-radius: 14px; text-decoration: none; font-weight: 600; margin-top: 20px; transition: 0.2s; border: none; cursor: pointer; font-size: 16px; }
+        .btn { display: inline-block; background: #007aff; color: white; padding: 16px 30px; border-radius: 14px; text-decoration: none; font-weight: 600; margin-top: 20px; transition: 0.2s; border: none; cursor: pointer; font-size: 16px; width: 100%; box-sizing: border-box; }
         .btn:disabled { background: #ccc; cursor: not-allowed; }
         .btn-tg { background: #229ED9; }
         #udid { font-size: 11px; color: #8e8e93; margin-top: 25px; word-break: break-all; border-top: 1px solid #eee; padding-top: 15px; }
@@ -17,6 +17,7 @@
         .pending { background: #fff3cd; color: #856404; }
         .active { background: #d4edda; color: #155724; }
         .error-text { color: #ff3b30; font-size: 14px; margin-top: 10px; }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
@@ -27,14 +28,18 @@
             <div class="loader"></div>
             <p id="statusMsg">Connecting to secure API...</p>
         </div>
+        
+        <div id="fallbackSection" class="hidden">
+            <p style="font-size: 13px; color: #666; margin-top: 15px;">If the popup didn't appear, click below:</p>
+            <a id="manualLink" href="#" class="btn" style="background: #5856d6;">Manual Install</a>
+        </div>
+
         <div id="udid"></div>
     </div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
-        
-        // Ensure this matches your Lambda API Gateway Subdomain
         const BACKEND_API = "https://api.kurde.store"; 
 
         async function startProvisioning() {
@@ -42,32 +47,37 @@
             const originalText = btn.innerText;
             
             btn.disabled = true;
-            btn.innerText = "Signing App... (10s)";
+            btn.innerText = "Requesting... (10s)";
 
             try {
                 const response = await fetch(`${BACKEND_API}`, { 
                     method: 'POST',
-                    mode: 'cors', // Explicitly handle CORS
+                    mode: 'cors',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         action: "sign_app",
                         udid: udid,
-                        ipaName: "KurdeStore",
-                        bundleId: "com.kurde.store", 
-                        appVersion: "1.0.0"
+                        ipaName: "KurdeStore"
                     })
                 });
 
                 const data = await response.json();
 
                 if (data.installLink) {
-                    btn.innerText = "Click 'Install' on Popup";
-                    window.location.href = data.installLink;
+                    btn.innerText = "Installing...";
+                    
+                    // Show manual fallback button just in case
+                    document.getElementById('fallbackSection').classList.remove('hidden');
+                    document.getElementById('manualLink').href = data.installLink;
+
+                    // Trigger the system popup
+                    window.location.replace(data.installLink);
+                    
                 } else {
-                    throw new Error("No install link received from server.");
+                    throw new Error("No install link received.");
                 }
             } catch (err) {
-                alert("Installation failed: " + err.message);
+                alert("Error: " + err.message);
                 btn.disabled = false;
                 btn.innerText = originalText;
             }
@@ -79,70 +89,40 @@
             const udidDiv = document.getElementById('udid');
 
             if (!udid) {
-                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please reinstall the profile.";
+                statusBox.innerHTML = "<b>No UDID detected.</b>";
                 return;
             }
 
             udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
             try {
-                // Fetch status from Lambda
-                const response = await fetch(`${BACKEND_API}?udid=${udid}&nocache=${Date.now()}`, {
-                    method: 'GET',
-                    mode: 'cors'
-                });
-
-                if (!response.ok) throw new Error(`Server returned ${response.status}`);
-
+                const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
                 const data = await response.json();
 
-                if (data.status === "not_found") {
-                    title.innerText = "Not Registered";
-                    statusBox.innerHTML = "<p>Account not found. Please try downloading the profile again.</p>";
-                    return;
-                }
-
-                if (data.isPaid === false) {
-                    title.innerText = "Payment Required";
-                    statusBox.innerHTML = `
-                        <div class="status-tag pending">Status: Unpaid</div>
-                        <p>Your device is registered but not active.</p>
-                        <a href="https://t.me/didolaw" class="btn btn-tg">Contact for Activation</a>
-                    `;
-                } else {
+                if (data.isPaid === true) {
                     const seventyTwoHours = 72 * 60 * 60 * 1000;
-                    const registrationTime = data.reg_date || 0;
-                    const timeLeft = seventyTwoHours - (Date.now() - registrationTime);
+                    const timeLeft = seventyTwoHours - (Date.now() - (data.reg_date || 0));
 
                     if (timeLeft > 0) {
                         title.innerText = "Apple Processing";
-                        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-                        const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-                        statusBox.innerHTML = `
-                            <div class="status-tag pending">Status: In Progress</div>
-                            <p>Apple activation takes 72 hours.<br><strong>Time remaining: ~${hours}h ${mins}m</strong></p>
-                        `;
+                        statusBox.innerHTML = `<div class="status-tag pending">Wait 72h</div><p>Activating your UDID...</p>`;
                     } else {
                         title.innerText = "Device Ready!";
                         statusBox.innerHTML = `
-                            <div class="status-tag active">Status: Fully Activated</div>
-                            <p>Your 72h wait is over! You can now install the store.</p>
+                            <div class="status-tag active">Registered</div>
                             <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                         `;
                     }
+                } else {
+                    title.innerText = "Unpaid";
+                    statusBox.innerHTML = `<a href="https://t.me/didolaw" class="btn btn-tg">Pay for Activation</a>`;
                 }
             } catch (err) {
-                console.error("Fetch Error:", err);
-                title.innerText = "Connection Error";
-                statusBox.innerHTML = `
-                    <p class="error-text">Cannot connect to API.</p>
-                    <p><small>${err.message}</small></p>
-                    <button class="btn" onclick="location.reload()">Retry Connection</button>
-                `;
+                title.innerText = "Offline";
+                statusBox.innerHTML = `<button class="btn" onclick="location.reload()">Retry</button>`;
             }
         }
 
-        // Initialize
         window.onload = getStatus;
     </script>
 </body>
