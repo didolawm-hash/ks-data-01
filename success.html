@@ -16,6 +16,7 @@
         .status-tag { display: inline-block; padding: 5px 15px; border-radius: 20px; font-size: 12px; font-weight: bold; margin-bottom: 10px; }
         .pending { background: #fff3cd; color: #856404; }
         .active { background: #d4edda; color: #155724; }
+        .error-text { color: #ff3b30; font-size: 14px; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -24,7 +25,7 @@
         <h2 id="title">Verifying...</h2>
         <div id="statusBox">
             <div class="loader"></div>
-            <p>Fetching your account status...</p>
+            <p id="statusMsg">Connecting to secure API...</p>
         </div>
         <div id="udid"></div>
     </div>
@@ -33,7 +34,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
         
-        // UPDATE THIS: Use your Ngrok or Server URL
+        // Ensure this matches your Lambda API Gateway Subdomain
         const BACKEND_API = "https://api.kurde.store"; 
 
         async function startProvisioning() {
@@ -44,14 +45,15 @@
             btn.innerText = "Signing App... (10s)";
 
             try {
-               const response = await fetch(`${BACKEND_API}`, { 
-                       method: 'POST',
-                       headers: { 'Content-Type': 'application/json' },
-                       body: JSON.stringify({
-                       action: "sign_app", // Add this so Lambda knows what to do
-                       udid: udid,
-                       ipaName: "KurdeStore"
-                      bundleId: "com.yourname.kurdestore", // Change to your actual bundle ID
+                const response = await fetch(`${BACKEND_API}`, { 
+                    method: 'POST',
+                    mode: 'cors', // Explicitly handle CORS
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: "sign_app",
+                        udid: udid,
+                        ipaName: "KurdeStore",
+                        bundleId: "com.kurde.store", 
                         appVersion: "1.0.0"
                     })
                 });
@@ -62,13 +64,12 @@
                     btn.innerText = "Click 'Install' on Popup";
                     window.location.href = data.installLink;
                 } else {
-                    throw new Error("No install link received");
+                    throw new Error("No install link received from server.");
                 }
             } catch (err) {
-                alert("Installation failed. Make sure the server is online.");
+                alert("Installation failed: " + err.message);
                 btn.disabled = false;
                 btn.innerText = originalText;
-                console.error(err);
             }
         }
 
@@ -78,18 +79,26 @@
             const udidDiv = document.getElementById('udid');
 
             if (!udid) {
-                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please start the process from our home page.";
+                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please reinstall the profile.";
                 return;
             }
 
-            udidDiv.innerHTML = "<strong>Your Device UDID:</strong><br>" + udid;
+            udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
             try {
-                const response = await fetch(`https://api.kurde.store?udid=${udid}&t=${Date.now()}`);
+                // Fetch status from Lambda
+                const response = await fetch(`${BACKEND_API}?udid=${udid}&nocache=${Date.now()}`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+
+                if (!response.ok) throw new Error(`Server returned ${response.status}`);
+
                 const data = await response.json();
 
                 if (data.status === "not_found") {
-                    statusBox.innerHTML = "<p>Account not found. Please reinstall the profile.</p>";
+                    title.innerText = "Not Registered";
+                    statusBox.innerHTML = "<p>Account not found. Please try downloading the profile again.</p>";
                     return;
                 }
 
@@ -97,38 +106,44 @@
                     title.innerText = "Payment Required";
                     statusBox.innerHTML = `
                         <div class="status-tag pending">Status: Unpaid</div>
-                        <p>To register this device, please purchase a package.</p>
-                        <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
+                        <p>Your device is registered but not active.</p>
+                        <a href="https://t.me/didolaw" class="btn btn-tg">Contact for Activation</a>
                     `;
-                } 
-                else {
+                } else {
                     const seventyTwoHours = 72 * 60 * 60 * 1000;
-                    const timeLeft = seventyTwoHours - (Date.now() - data.reg_date);
+                    const registrationTime = data.reg_date || 0;
+                    const timeLeft = seventyTwoHours - (Date.now() - registrationTime);
 
                     if (timeLeft > 0) {
-                        title.innerText = "Processing...";
+                        title.innerText = "Apple Processing";
                         const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        const mins = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
                         statusBox.innerHTML = `
-                            <div class="status-tag pending">Status: Apple Processing</div>
-                            <p>Apple is activating your device (~${hours}h left).</p>
+                            <div class="status-tag pending">Status: In Progress</div>
+                            <p>Apple activation takes 72 hours.<br><strong>Time remaining: ~${hours}h ${mins}m</strong></p>
                         `;
-                    } 
-                    else {
-                        // --- CASE 3: READY TO INSTALL ---
-                        title.innerText = "Device Active!";
+                    } else {
+                        title.innerText = "Device Ready!";
                         statusBox.innerHTML = `
-                            <div class="status-tag active">Status: Registered</div>
-                            <p>Your device is ready. Click below to sign and install the store.</p>
+                            <div class="status-tag active">Status: Fully Activated</div>
+                            <p>Your 72h wait is over! You can now install the store.</p>
                             <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                         `;
                     }
                 }
             } catch (err) {
-                statusBox.innerHTML = "<p>Connection error. Please refresh.</p>";
+                console.error("Fetch Error:", err);
+                title.innerText = "Connection Error";
+                statusBox.innerHTML = `
+                    <p class="error-text">Cannot connect to API.</p>
+                    <p><small>${err.message}</small></p>
+                    <button class="btn" onclick="location.reload()">Retry Connection</button>
+                `;
             }
         }
 
-        getStatus();
+        // Initialize
+        window.onload = getStatus;
     </script>
 </body>
 </html>
