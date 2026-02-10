@@ -34,7 +34,7 @@
         const udid = urlParams.get('udid');
         
         // UPDATE THIS: Use your Ngrok or Server URL
-        const BACKEND_API = "https://kurde.store"; 
+        const BACKEND_API = "https://api.kurde.store"; 
 
         async function startProvisioning() {
             const btn = document.getElementById('installBtn');
@@ -44,13 +44,14 @@
             btn.innerText = "Signing App... (10s)";
 
             try {
-                const response = await fetch(`${BACKEND_API}/api/install`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        udid: udid,
-                        appName: "KurdeStore",
-                        ipaName: "KurdeStore",
+               const response = await fetch(`${BACKEND_API}`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: "sign_app", // Add this so Lambda knows what to do
+            udid: udid,
+            ipaName: "KurdeStore"
+        })
                         bundleId: "com.yourname.kurdestore", // Change to your actual bundle ID
                         appVersion: "1.0.0"
                     })
