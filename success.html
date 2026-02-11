@@ -94,53 +94,51 @@
     const udidDiv = document.getElementById('udid');
 
     if (!udid) {
-        statusBox.innerHTML = "<b>No UDID detected.</b><br>Please install the profile.";
+        statusBox.innerHTML = "<b>No UDID detected.</b>";
         return;
     }
 
     udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
     try {
-        // Fetch data from Lambda
         const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
         const data = await response.json();
-        
-        console.log("API Response:", data); // Check this in Safari Inspector
 
-        // Check isPaid (Now matches Lambda exactly)
         if (data.isPaid === true || String(data.isPaid).toLowerCase() === "true") {
             
-            const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+            // CORRECTED: 72 Hours instead of 14 days
+            const seventyTwoHours = 72 * 60 * 60 * 1000;
             const registrationDate = Number(data.reg_date) || Date.now();
-            const timeLeft = fourteenDays - (Date.now() - registrationDate);
+            const timeLeft = seventyTwoHours - (Date.now() - registrationDate);
 
             if (timeLeft > 0) {
                 title.innerText = "Apple Processing";
-                const totalH = Math.floor(timeLeft / (1000 * 60 * 60));
+                const totalHours = Math.floor(timeLeft / (1000 * 60 * 60));
+                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                
                 statusBox.innerHTML = `
-                    <div class="status-tag pending">Wait Time: ${Math.floor(totalH/24)}d ${totalH%24}h</div>
-                    <p>Apple is activating your UDID. Please wait.</p>
+                    <div class="status-tag pending">Time Left: ${totalHours}h ${minutes}m</div>
+                    <p>Apple is activating your device.<br>This usually takes 72 hours total.</p>
                 `;
             } else {
                 title.innerText = "Device Ready!";
                 statusBox.innerHTML = `
-                    <div class="status-tag active">Active</div>
+                    <div class="status-tag active">Status: Active</div>
+                    <p>Activation complete! You can now install Kurde Store.</p>
                     <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                 `;
             }
         } else {
-            // User exists but isPaid is false
             title.innerText = "Activation Required";
             statusBox.innerHTML = `
                 <div class="status-tag pending">Payment Not Found</div>
-                <p>Your UDID is registered but not active.</p>
+                <p>Your UDID is registered but not yet paid.</p>
                 <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
             `;
         }
     } catch (err) {
-        console.error("Fetch Error:", err);
         title.innerText = "Connection Error";
-        statusBox.innerHTML = `<p class="error-text">Cannot connect to API.</p>`;
+        statusBox.innerHTML = `<p class="error-text">API error. Try again later.</p>`;
     }
 }
 
