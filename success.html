@@ -41,8 +41,6 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const udid = urlParams.get('udid');
-        
-        // This should be your KurdeStore_Manager-API endpoint
         const BACKEND_API = "https://api.kurde.store/"; 
 
         async function startProvisioning() {
@@ -53,7 +51,6 @@
             btn.disabled = true;
             btn.innerText = "Signing App...";
 
-            // Update status UI to show progress
             statusBox.innerHTML = `
                 <div class="loader"></div>
                 <p class="progress-text">zsign is preparing your personal build...<br>This takes 10-20 seconds.</p>
@@ -64,25 +61,16 @@
                     method: 'POST',
                     mode: 'cors',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: "sign_app",
-                        udid: udid,
-                        appId: "KurdeStore" // Make sure this matches your DynamoDB appId
-                    })
+                    body: JSON.stringify({ action: "sign_app", udid: udid, appId: "KurdeStore" })
                 });
 
                 if (!response.ok) throw new Error("Server error during signing.");
-
                 const data = await response.json();
 
                 if (data.installLink) {
                     btn.innerText = "Check Home Screen";
-                    
-                    // Show manual fallback in case auto-redirect fails
                     document.getElementById('fallbackSection').classList.remove('hidden');
                     document.getElementById('manualLink').href = data.installLink;
-
-                    // Trigger the iOS installation popup
                     window.location.href = data.installLink;
                     
                     statusBox.innerHTML = `
@@ -90,7 +78,7 @@
                         <p>If prompted, click <b>Install</b>.<br>The app will appear on your home screen.</p>
                     `;
                 } else {
-                    throw new Error("Signing completed but no link was provided.");
+                    throw new Error("No link provided.");
                 }
             } catch (err) {
                 alert("Installation failed: " + err.message);
@@ -106,48 +94,55 @@
             const udidDiv = document.getElementById('udid');
 
             if (!udid) {
-                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please start from the home page.";
+                statusBox.innerHTML = "<b>No UDID detected.</b><br>Please install the profile first.";
                 return;
             }
 
             udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
             try {
-                // Check if user is paid/registered
+                // Fetch data from Lambda
                 const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
                 const data = await response.json();
 
-                if (data.isPaid === true) {
-                    const seventyTwoHours = 72 * 60 * 60 * 1000;
+                // Check if user is paid (using the name from our updated Lambda)
+                if (data.isPaid === true || data.isPaid === "true") {
+                    
+                    // 14 Days logic (336 hours)
+                    const fourteenDays = 14 * 24 * 60 * 60 * 1000;
                     const registrationDate = data.reg_date || Date.now();
-                    const timeLeft = seventyTwoHours - (Date.now() - registrationDate);
+                    const timeLeft = fourteenDays - (Date.now() - registrationDate);
 
                     if (timeLeft > 0) {
                         title.innerText = "Apple Processing";
-                        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        const totalHours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        const d = Math.floor(totalHours / 24);
+                        const h = totalHours % 24;
+
                         statusBox.innerHTML = `
-                            <div class="status-tag pending">Wait 72 Hours</div>
-                            <p>Apple is currently activating your device.<br>Estimated time left: ~${hours}h</p>
+                            <div class="status-tag pending">Verification Wait: ${d}d ${h}h</div>
+                            <p>Apple security verification is currently in progress.<br>Your device will be ready after the wait time.</p>
                         `;
                     } else {
                         title.innerText = "Device Ready!";
                         statusBox.innerHTML = `
-                            <div class="status-tag active">Registered</div>
-                            <p>Your device is fully activated. You can now sign and install Kurde Store.</p>
+                            <div class="status-tag active">Status: Active</div>
+                            <p>Your device is fully activated. You can now install the store.</p>
                             <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
                         `;
                     }
                 } else {
+                    // This triggers if isPaid is false (UDID found but not paid)
                     title.innerText = "Activation Required";
                     statusBox.innerHTML = `
                         <div class="status-tag pending">Payment Not Found</div>
-                        <p>To use Kurde Store, your UDID must be registered.</p>
-                        <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
+                        <p>Your UDID is registered, but your subscription is inactive.</p>
+                        <a href="https://t.me/didolaw" class="btn btn-tg">Contact for Activation</a>
                     `;
                 }
             } catch (err) {
-                title.innerText = "Connection Error";
-                statusBox.innerHTML = `<p class="error-text">API is currently unreachable.</p><button class="btn" onclick="location.reload()">Retry</button>`;
+                title.innerText = "API Error";
+                statusBox.innerHTML = `<p class="error-text">Unable to reach the server. Please try again later.</p>`;
             }
         }
 
