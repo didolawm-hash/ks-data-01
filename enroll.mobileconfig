@@ -5,7 +5,7 @@
 	<key>PayloadContent</key>
 	<dict>
 		<key>URL</key>
-		<string>https://api.kurde.store/</string>
+		<string>https://api.kurde.store</string>
 		<key>DeviceAttributes</key>
 		<array>
 			<string>UDID</string>
@@ -17,7 +17,7 @@
 	<key>PayloadOrganization</key>
 	<string>kurde store</string>
 	<key>PayloadDisplayName</key>
-	<string>kurdestore Profile</string>
+	<string>kurde store Profile</string>
 	<key>PayloadVersion</key>
 	<integer>1</integer>
 	<key>PayloadType</key>
