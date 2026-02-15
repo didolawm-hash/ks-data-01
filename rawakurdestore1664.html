@@ -3,155 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kurde Store - Master Admin</title>
+    <title>KurdeStore Admin</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #1c1c1e; color: white; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-        #login-screen { text-align: center; background: #2c2c2e; padding: 40px; border-radius: 20px; border: 1px solid #3a3a3c; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        #admin-content { display: none; width: 100%; max-width: 900px; padding: 20px; display: flex; flex-direction: column; gap: 20px; }
-        .box { background: #2c2c2e; padding: 25px; border-radius: 20px; border: 1px solid #3a3a3c; }
-        h1, h2 { margin-top: 0; }
-        input, select { width: 100%; padding: 12px; margin-top: 10px; border-radius: 10px; border: 1px solid #3a3a3c; background: #1c1c1e; color: white; box-sizing: border-box; font-size: 16px; }
-        .btn { padding: 14px; border-radius: 12px; border: none; font-weight: bold; cursor: pointer; width: 100%; margin-top: 15px; font-size: 16px; transition: opacity 0.2s; }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .btn-blue { background: #0a84ff; color: white; }
-        .btn-green { background: #30d158; color: white; }
-        .admin-item { display: flex; align-items: center; background: #1c1c1e; padding: 15px; border-radius: 15px; margin-bottom: 12px; border: 1px solid #3a3a3c; }
-        .admin-item img { width: 50px; height: 50px; border-radius: 12px; margin-right: 15px; object-fit: cover; }
-        .item-info { flex-grow: 1; }
-        .item-info b { display: block; font-size: 17px; }
-        .item-info small { color: #8e8e93; }
-        .delete-btn { background: #ff3b30; color: white; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        body { background-color: #121212; color: white; font-family: -apple-system, system-ui, sans-serif; display: flex; justify-content: center; padding: 50px; }
+        .container { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { text-align: center; color: #007aff; }
+        input, select, textarea { width: 100%; padding: 10px; margin: 10px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007aff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #555; }
+        .progress { height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
+        .bar { height: 100%; background: #00d60f; width: 0%; transition: width 0.2s; }
+        .status { font-size: 12px; color: #888; margin-top: 5px; text-align: right; }
     </style>
 </head>
 <body>
 
-<div id="login-screen">
-    <h1>Admin Login</h1>
-    <input type="password" id="passInput" placeholder="Enter Password">
-    <button class="btn btn-blue" onclick="checkPass()">Unlock Panel</button>
-</div>
+<div class="container">
+    <h2>Upload App</h2>
+    
+    <label>App Icon (.png/.jpg)</label>
+    <input type="file" id="iconFile" accept="image/*">
+    <div class="progress"><div class="bar" id="iconBar"></div></div>
 
-<div id="admin-content" style="display: none;">
-    <div class="box">
-        <h2>Add New App</h2>
-        <form id="appForm">
-            <input type="text" id="name" placeholder="App Name (e.g. Screen Mirror)" required>
-            <input type="text" id="ipa_link" placeholder="Direct S3 IPA Link" required>
-            <input type="text" id="icon" placeholder="Icon Image URL" required>
-            <select id="category">
-                <option value="Applications">Applications</option>
-                <option value="Games">Games</option>
-            </select>
-            <input type="text" id="version" placeholder="Version (e.g. 1.0)" value="1.0">
-            <button type="submit" id="submitBtn" class="btn btn-green">Publish to Store</button>
-        </form>
-    </div>
+    <label>App File (.ipa)</label>
+    <input type="file" id="ipaFile" accept=".ipa">
+    <div class="progress"><div class="bar" id="ipaBar"></div></div>
 
-    <div class="box">
-        <h2>Live Apps</h2>
-        <div id="admin-list">Loading apps...</div>
-    </div>
+    <hr style="border-color: #333; margin: 20px 0;">
+
+    <input type="text" id="appName" placeholder="App Name (e.g. Video Star)">
+    <input type="text" id="bundleId" placeholder="Bundle ID (e.g. com.videostar)">
+    <input type="text" id="version" placeholder="Version (e.g. 1.0)">
+    <input type="text" id="size" placeholder="Size (e.g. 50MB)">
+    <textarea id="desc" placeholder="Description..." rows="3"></textarea>
+    
+    <select id="type">
+        <option value="false">App</option>
+        <option value="true">Game</option>
+    </select>
+
+    <button onclick="startUpload()" id="uploadBtn">🚀 Upload to Store</button>
+    <p class="status" id="finalStatus"></p>
 </div>
 
 <script>
-    // MATCH THIS TO YOUR AWS INVOKE URL
-    const API_URL = "https://wgcdclia51.execute-api.eu-west-2.amazonaws.com";
+    // ⚠️ PASTE YOUR LAMBDA FUNCTION URL HERE
+    const API_URL = "YOUR_LAMBDA_URL_HERE"; 
 
-    function checkPass() {
-        if (document.getElementById('passInput').value === "didoxrawa2027") {
-            document.getElementById('login-screen').style.display = 'none';
-            document.getElementById('admin-content').style.display = 'block';
-            loadAdminList();
-        } else { 
-            alert("Incorrect Password"); 
-        }
-    }
+    async function startUpload() {
+        const btn = document.getElementById('uploadBtn');
+        const status = document.getElementById('finalStatus');
+        const iconFile = document.getElementById('iconFile').files[0];
+        const ipaFile = document.getElementById('ipaFile').files[0];
 
-    document.getElementById('appForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const btn = document.getElementById('submitBtn');
-        btn.innerText = "Publishing...";
+        if (!iconFile || !ipaFile) return alert("Please select both Icon and IPA files.");
+        
         btn.disabled = true;
-
-        const nameVal = document.getElementById('name').value;
-        const data = {
-            appId: nameVal.toLowerCase().replace(/\s/g, '') + "_" + Math.floor(Math.random() * 1000),
-            name: nameVal,
-            ipa: document.getElementById('ipa_link').value,
-            icon: document.getElementById('icon').value,
-            category: document.getElementById('category').value,
-            version: document.getElementById('version').value,
-            bundleId: "com.kurde." + nameVal.toLowerCase().replace(/\s/g, '')
-        };
+        btn.innerText = "⏳ Uploading Files...";
 
         try {
-            const res = await fetch(`${API_URL}/add-app`, {
-                method: 'POST',
-                mode: 'cors',
-                headers: { 'Content-Type': 'application/json' },
+            // 1. Upload Icon
+            status.innerText = "Uploading Icon...";
+            const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+
+            // 2. Upload IPA
+            status.innerText = "Uploading IPA (This may take time)...";
+            const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+
+            // 3. Save Data to DynamoDB
+            status.innerText = "Saving to Database...";
+            
+            const data = {
+                action: "save_item",
+                name: document.getElementById('appName').value,
+                bundleId: document.getElementById('bundleId').value,
+                version: document.getElementById('version').value,
+                size: document.getElementById('size').value,
+                desc: document.getElementById('desc').value,
+                isGame: document.getElementById('type').value === "true",
+                iconKey: iconKey,
+                ipaKey: ipaKey
+            };
+
+            const response = await fetch(API_URL, {
+                method: "POST",
                 body: JSON.stringify(data)
             });
 
-            if (res.ok) {
-                alert("🚀 App Published Successfully!");
-                document.getElementById('appForm').reset();
-                loadAdminList();
+            if (response.ok) {
+                alert("✅ Success! App added to store.");
+                location.reload();
             } else {
-                const errorText = await res.text();
-                alert("Server Error: " + res.status + " - " + errorText);
+                throw new Error("Database save failed");
             }
-        } catch (err) {
-            console.error("Connection Error Details:", err);
-            alert("Connection Error. Ensure the ANY /{proxy+} route is set in AWS API Gateway.");
-        } finally {
-            btn.innerText = "Publish to Store";
+
+        } catch (error) {
+            console.error(error);
+            alert("❌ Error: " + error.message);
             btn.disabled = false;
-        }
-    };
-
-    async function loadAdminList() {
-        try {
-            const res = await fetch(`${API_URL}/get-apps`);
-            if (!res.ok) throw new Error("Could not fetch apps");
-            
-            const items = await res.json();
-            const listDiv = document.getElementById('admin-list');
-            
-            if (!items || items.length === 0) {
-                listDiv.innerHTML = "<p style='color:#8e8e93'>No apps found in store.</p>";
-                return;
-            }
-
-            listDiv.innerHTML = items.map(item => `
-                <div class="admin-item">
-                    <img src="${item.icon}" onerror="this.src='https://via.placeholder.com/50'">
-                    <div class="item-info">
-                        <b>${item.name}</b>
-                        <small>Version ${item.version || '1.0'} | ${item.category}</small>
-                    </div>
-                    <button onclick="deleteApp('${item.appId}')" class="delete-btn">Delete</button>
-                </div>`).join('');
-        } catch (err) {
-            document.getElementById('admin-list').innerHTML = "<p style='color:#ff3b30'>Error loading apps. Check API Gateway.</p>";
+            btn.innerText = "Try Again";
         }
     }
 
-    async function deleteApp(id) {
-        if(!confirm("Are you sure you want to delete this app?")) return;
-        try {
-            const res = await fetch(`${API_URL}/delete-app`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id })
-            });
-            if (res.ok) {
-                loadAdminList();
-            } else {
-                alert("Delete failed.");
-            }
-        } catch (err) {
-            alert("Network error while deleting.");
-        }
+    async function uploadFile(file, folder, barId) {
+        // A. Get Presigned URL
+        const res = await fetch(API_URL, {
+            method: "POST",
+            body: JSON.stringify({
+                action: "get_url",
+                fileName: file.name,
+                fileType: folder,
+                contentType: file.type
+            })
+        });
+        const { uploadUrl, key } = await res.json();
+
+        // B. Upload Direct to S3
+        await fetch(uploadUrl, {
+            method: "PUT",
+            body: file,
+            headers: { "Content-Type": file.type }
+        });
+
+        document.getElementById(barId).style.width = "100%";
+        return key;
     }
 </script>
 
