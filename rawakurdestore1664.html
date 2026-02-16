@@ -3,115 +3,113 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KurdeStore Admin</title>
+    <title>KurdeStore Admin Panel</title>
     <style>
-        body { background-color: #121212; color: white; font-family: -apple-system, system-ui, sans-serif; display: flex; justify-content: center; padding: 50px; }
-        .container { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h2 { text-align: center; color: #007aff; }
-        input, select, textarea { width: 100%; padding: 10px; margin: 10px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #007aff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #555; }
-        .progress { height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
-        .bar { height: 100%; background: #00d60f; width: 0%; transition: width 0.2s; }
-        .status { font-size: 12px; color: #888; margin-top: 5px; text-align: right; }
+        body { background-color: #121212; color: white; font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
+        .box { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+        h2 { text-align: center; color: #0a84ff; }
+        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 6px; box-sizing: border-box; }
+        .label { font-size: 12px; color: #aaa; margin-top: 10px; display: block; }
+        button { width: 100%; padding: 12px; background: #0a84ff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; }
+        button:hover { background: #0070e0; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; }
+        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.2s; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h2>Upload App</h2>
-    
-    <label>App Icon (.png/.jpg)</label>
-    <input type="file" id="iconFile" accept="image/*">
-    <div class="progress"><div class="bar" id="iconBar"></div></div>
+<div class="box">
+    <h2>🚀 Upload App</h2>
 
-    <label>App File (.ipa)</label>
+    <span class="label">1. Select App Icon (.png)</span>
+    <input type="file" id="iconFile" accept="image/*">
+    <div class="bar-container"><div class="bar" id="iconBar"></div></div>
+
+    <span class="label">2. Select IPA File (.ipa)</span>
     <input type="file" id="ipaFile" accept=".ipa">
-    <div class="progress"><div class="bar" id="ipaBar"></div></div>
+    <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
     <hr style="border-color: #333; margin: 20px 0;">
 
-    <input type="text" id="appName" placeholder="App Name (e.g. Video Star)">
+    <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
     <input type="text" id="bundleId" placeholder="Bundle ID (e.g. com.videostar)">
-    <input type="text" id="version" placeholder="Version (e.g. 1.0)">
-    <input type="text" id="size" placeholder="Size (e.g. 50MB)">
-    <textarea id="desc" placeholder="Description..." rows="3"></textarea>
-    
-    <select id="type">
+    <input type="text" id="version" placeholder="Version (e.g. 1.2)">
+    <input type="text" id="size" placeholder="Size (e.g. 55MB)">
+    <textarea id="desc" rows="3" placeholder="Description..."></textarea>
+
+    <select id="isGame">
         <option value="false">App</option>
         <option value="true">Game</option>
     </select>
 
-    <button onclick="startUpload()" id="uploadBtn">🚀 Upload to Store</button>
-    <p class="status" id="finalStatus"></p>
+    <button onclick="startUpload()" id="btn">Upload to Store</button>
 </div>
 
 <script>
-    // ⚠️ PASTE YOUR LAMBDA FUNCTION URL HERE
-    const API_URL = "YOUR_LAMBDA_URL_HERE"; 
+    // ⚠️ PASTE YOUR LAMBDA URL HERE!
+    const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
     async function startUpload() {
-        const btn = document.getElementById('uploadBtn');
-        const status = document.getElementById('finalStatus');
+        const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
 
-        if (!iconFile || !ipaFile) return alert("Please select both Icon and IPA files.");
-        
+        if (!iconFile || !ipaFile) return alert("Please select both files!");
+        if (!document.getElementById('name').value) return alert("Enter a name!");
+
         btn.disabled = true;
-        btn.innerText = "⏳ Uploading Files...";
+        btn.innerText = "⏳ Uploading...";
 
         try {
             // 1. Upload Icon
-            status.innerText = "Uploading Icon...";
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-
+            
             // 2. Upload IPA
-            status.innerText = "Uploading IPA (This may take time)...";
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            // 3. Save Data to DynamoDB
-            status.innerText = "Saving to Database...";
+            // 3. Save to DynamoDB
+            btn.innerText = "💾 Saving...";
             
             const data = {
                 action: "save_item",
-                name: document.getElementById('appName').value,
+                name: document.getElementById('name').value,
                 bundleId: document.getElementById('bundleId').value,
                 version: document.getElementById('version').value,
                 size: document.getElementById('size').value,
                 desc: document.getElementById('desc').value,
-                isGame: document.getElementById('type').value === "true",
+                isGame: document.getElementById('isGame').value === 'true',
                 iconKey: iconKey,
                 ipaKey: ipaKey
             };
 
-            const response = await fetch(API_URL, {
-                method: "POST",
+            const res = await fetch(API_URL, {
+                method: 'POST',
                 body: JSON.stringify(data)
             });
 
-            if (response.ok) {
+            if (res.ok) {
                 alert("✅ Success! App added to store.");
                 location.reload();
             } else {
-                throw new Error("Database save failed");
+                alert("❌ Database Error!");
             }
 
-        } catch (error) {
-            console.error(error);
-            alert("❌ Error: " + error.message);
+        } catch (err) {
+            console.error(err);
+            alert("Error: " + err.message);
+        } finally {
             btn.disabled = false;
-            btn.innerText = "Try Again";
+            btn.innerText = "Upload to Store";
         }
     }
 
     async function uploadFile(file, folder, barId) {
-        // A. Get Presigned URL
+        // A. Get Presigned URL from Lambda
         const res = await fetch(API_URL, {
-            method: "POST",
+            method: 'POST',
             body: JSON.stringify({
-                action: "get_url",
+                action: 'get_url',
                 fileName: file.name,
                 fileType: folder,
                 contentType: file.type
@@ -119,11 +117,11 @@
         });
         const { uploadUrl, key } = await res.json();
 
-        // B. Upload Direct to S3
+        // B. Upload directly to S3
         await fetch(uploadUrl, {
-            method: "PUT",
+            method: 'PUT',
             body: file,
-            headers: { "Content-Type": file.type }
+            headers: { 'Content-Type': file.type }
         });
 
         document.getElementById(barId).style.width = "100%";
