@@ -104,16 +104,21 @@
             const card = document.createElement('div');
             card.className = 'app-item';
             
-            // Fixed Icon URL Logic
-            const iconName = item.iconKey ? item.iconKey.split('/').pop() : '';
-            const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${iconName}`;
+            // --- THE ICON FIX ---
+            // 1. Get the raw key (e.g., "icons/123_img.png")
+            let rawKey = item.iconKey || "";
+            // 2. Remove any extra "icons/" prefix if it's already there
+            let cleanFileName = rawKey.split('/').pop(); 
+            // 3. Build the final URL
+            const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
             
             card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
+                <img src="${iconSrc}" class="app-icon" 
+                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Error';">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-meta">${item.version} • ${item.size}</div>
-                    <div class="app-meta" style="color:#444">${item.appId}</div>
+                    <div class="app-meta" style="color:#444; font-size: 10px;">${item.appId}</div>
                 </div>
                 <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
             `;
@@ -133,13 +138,15 @@
 
     async function deleteApp(id, name) {
         if (!confirm(`Delete ${name}?`)) return;
-        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
-        loadApps();
+        try {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
+            loadApps();
+        } catch (e) { alert("Delete failed"); }
     }
 
     function autoGenerateId() {
         const name = document.getElementById('name').value;
-        document.getElementById('bundleId').value = "com.kurdestore." + name.replace(/\s+/g, '').toLowerCase();
+        document.getElementById('bundleId').value = "com.kurdestore." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
     }
 
     function autoFillSize() {
@@ -149,11 +156,18 @@
 
     async function startUpload() {
         const btn = document.getElementById('btn');
+        const iconFile = document.getElementById('iconFile').files[0];
+        const ipaFile = document.getElementById('ipaFile').files[0];
+
+        if(!iconFile || !ipaFile || !document.getElementById('name').value) {
+            return alert("Please select files and enter a name.");
+        }
+
         btn.disabled = true; btn.innerText = "Uploading...";
 
         try {
-            const iconKey = await uploadFile(document.getElementById('iconFile').files[0], 'icons', 'iconBar');
-            const ipaKey = await uploadFile(document.getElementById('ipaFile').files[0], 'apps', 'ipaBar');
+            const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+            const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
             await fetch(API_URL, {
                 method: 'POST',
@@ -172,7 +186,8 @@
             btn.innerText = "✅ Success!";
             setTimeout(() => location.reload(), 1000);
         } catch (err) {
-            alert("Upload failed!");
+            alert("Upload failed! Check Console.");
+            console.error(err);
             btn.disabled = false;
             btn.innerText = "Upload to Store";
         }
@@ -184,7 +199,14 @@
             body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type })
         });
         const { uploadUrl, key } = await res.json();
-        await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
+        
+        // Progress bar logic
+        await fetch(uploadUrl, { 
+            method: 'PUT', 
+            body: file, 
+            headers: { 'Content-Type': file.type } 
+        });
+        
         document.getElementById(barId).style.width = "100%";
         return key;
     }
