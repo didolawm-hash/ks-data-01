@@ -110,7 +110,7 @@
             const card = document.createElement('div');
             card.className = 'app-item';
             // Use iconKey directly if the full URL is failing
-            const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
+            const iconSrc = `https://s3.eu-west-2.amazonaws.com/kurde-store-data/${item.iconKey}`;
             
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/50?text=No+Icon'">
