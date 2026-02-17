@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KurdeStore Admin Panel</title>
-    <script src="https://cdn.jsdelivr.net/npm/app-info-parser/dist/app-info-parser.min.js"></script>
+    <script src="https://unpkg.com/app-info-parser/dist/app-info-parser.min.js"></script>
     <style>
         body { background-color: #121212; color: white; font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
         .box { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -57,47 +57,50 @@
     // ⚠️ PASTE YOUR LAMBDA URL HERE!
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
-    // --- NEW FUNCTION: Auto-Read IPA ---
     async function autoFillIpaInfo() {
         const fileInput = document.getElementById('ipaFile');
         const file = fileInput.files[0];
         if (!file) return;
 
-        // 1. Get Elements
         const bundleInput = document.getElementById('bundleId');
         const versionInput = document.getElementById('version');
         const sizeInput = document.getElementById('size');
 
-        // 2. Auto-Calculate Size immediately
-        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1); // Convert bytes to MB
+        // 1. Auto-Calculate Size
+        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1); 
         sizeInput.value = fileSizeMB + " MB";
 
-        // 3. Start Parsing Animation
         bundleInput.placeholder = "Reading IPA...";
         bundleInput.classList.add('scanning');
 
         try {
-            // 4. Use the library to parse IPA
+            // 2. Check if Library Loaded
+            if (typeof AppInfoParser === 'undefined') {
+                throw new Error("Library failed to load. Check your internet or try again.");
+            }
+
+            // 3. Parse IPA
             const parser = new AppInfoParser(file);
             const result = await parser.parse();
 
-            // 5. Fill fields found in Info.plist
-            // result.package = Bundle ID
-            // result.version = Version
-            
-            if (result.package) bundleInput.value = result.package;
-            else if (result.CFBundleIdentifier) bundleInput.value = result.CFBundleIdentifier;
+            console.log("Parsed Result:", result); // Look at Console (F12) if this works
 
-            if (result.version) versionInput.value = result.version;
-            else if (result.CFBundleShortVersionString) versionInput.value = result.CFBundleShortVersionString;
+            // 4. Fill Fields
+            if (result.CFBundleIdentifier) bundleInput.value = result.CFBundleIdentifier;
+            else if (result.package) bundleInput.value = result.package;
+            else bundleInput.value = "Unknown Bundle ID";
 
-            console.log("IPA Info Found:", result); // Debugging
+            if (result.CFBundleShortVersionString) versionInput.value = result.CFBundleShortVersionString;
+            else if (result.version) versionInput.value = result.version;
+            else versionInput.value = "1.0";
 
         } catch (err) {
             console.error("Error reading IPA:", err);
-            alert("Could not auto-read IPA. You can still type details manually.");
+            // ⚠️ THIS WILL TELL YOU THE REAL ERROR
+            alert("Auto-Read Failed: " + err.message + "\n\nYou can still type details manually.");
         } finally {
             bundleInput.classList.remove('scanning');
+            if (!bundleInput.value) bundleInput.placeholder = "Bundle ID (e.g. com.videostar)";
         }
     }
 
@@ -156,7 +159,6 @@
     }
 
     async function uploadFile(file, folder, barId) {
-        // A. Get Presigned URL from Lambda
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({
@@ -168,7 +170,6 @@
         });
         const { uploadUrl, key } = await res.json();
 
-        // B. Upload directly to S3
         await fetch(uploadUrl, {
             method: 'PUT',
             body: file,
