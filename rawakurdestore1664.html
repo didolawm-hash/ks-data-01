@@ -3,165 +3,198 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KurdeStore Admin Panel</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <title>KurdeStore Admin Dashboard</title>
     <style>
-        body { background-color: #121212; color: white; font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
-        .box { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h2 { text-align: center; color: #0a84ff; }
-        input, textarea, select { width: 100%; padding: 10px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 6px; box-sizing: border-box; }
-        .label { font-size: 12px; color: #aaa; margin-top: 10px; display: block; }
-        button { width: 100%; padding: 12px; background: #0a84ff; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 20px; }
-        button:hover { background: #0070e0; }
-        button:disabled { background: #444; cursor: not-allowed; }
-        .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; }
-        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.2s; }
+        body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; }
         
-        .scanning { border-color: #0a84ff !important; animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.4); } 70% { box-shadow: 0 0 0 5px rgba(10, 132, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0); } }
+        /* LAYOUT: Two Columns */
+        .container { display: flex; gap: 30px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+        
+        /* CARD STYLING */
+        .box { background: #1e1e1e; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333; }
+        .upload-box { flex: 1; max-width: 450px; position: sticky; top: 20px; }
+        .list-box { flex: 1.5; min-height: 80vh; }
+
+        h2 { margin-top: 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; }
+        .refresh-btn { margin-left: auto; background: none; border: 1px solid #333; padding: 5px 10px; font-size: 14px; color: #aaa; cursor: pointer; border-radius: 6px; }
+        .refresh-btn:hover { background: #333; color: white; }
+
+        /* FORM INPUTS */
+        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
+        input:focus { border-color: #0a84ff; outline: none; }
+        .label { font-size: 12px; color: #888; margin-top: 10px; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        /* BUTTONS */
+        .primary-btn { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; }
+        .primary-btn:hover { background: #0070e0; }
+        .primary-btn:disabled { background: #444; cursor: not-allowed; }
+
+        /* PROGRESS BARS */
+        .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
+        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s ease; }
+
+        /* APP LIST (RIGHT SIDE) */
+        .app-item { display: flex; align-items: center; background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #333; transition: transform 0.1s; }
+        .app-item:hover { transform: translateY(-2px); border-color: #555; }
+        
+        .app-icon { width: 50px; height: 50px; border-radius: 10px; object-fit: cover; background: #000; margin-right: 15px; }
+        .app-info { flex: 1; }
+        .app-name { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
+        .app-meta { font-size: 12px; color: #888; }
+        
+        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .delete-btn:hover { background: #ff3b30; color: white; }
+
+        /* Empty State */
+        .empty-state { text-align: center; color: #555; margin-top: 50px; }
     </style>
 </head>
 <body>
 
-<div class="box">
-    <h2>🚀 Upload App</h2>
-
-    <span class="label">1. Select App Icon (.png)</span>
-    <input type="file" id="iconFile" accept="image/*">
-    <div class="bar-container"><div class="bar" id="iconBar"></div></div>
-
-    <span class="label">2. Select IPA File (.ipa)</span>
-    <input type="file" id="ipaFile" accept=".ipa" onchange="readIpaLightweight()">
-    <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
-
-    <hr style="border-color: #333; margin: 20px 0;">
-
-    <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
+<div class="container">
     
-    <input type="text" id="bundleId" placeholder="Bundle ID (e.g. com.videostar)">
-    <input type="text" id="version" placeholder="Version (e.g. 1.2)">
-    <input type="text" id="size" placeholder="Size (e.g. 55MB)">
-    
-    <textarea id="desc" rows="3" placeholder="Description..."></textarea>
+    <div class="box upload-box">
+        <h2>🚀 Upload App</h2>
 
-    <select id="isGame">
-        <option value="false">App</option>
-        <option value="true">Game</option>
-    </select>
+        <span class="label">1. Select Files</span>
+        <input type="file" id="iconFile" accept="image/*">
+        <div class="bar-container"><div class="bar" id="iconBar"></div></div>
 
-    <button onclick="startUpload()" id="btn">Upload to Store</button>
+        <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillSize()">
+        <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
+
+        <span class="label">2. App Details</span>
+        <input type="text" id="name" placeholder="App Name (e.g. Minecraft)" oninput="autoGenerateId()">
+        <input type="text" id="bundleId" placeholder="Bundle ID (Auto-Generated)">
+        
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="version" placeholder="Version" value="1.0">
+            <input type="text" id="size" placeholder="Size" readonly>
+        </div>
+
+        <textarea id="desc" rows="3" placeholder="Description..."></textarea>
+
+        <select id="isGame">
+            <option value="false">App</option>
+            <option value="true">Game</option>
+        </select>
+
+        <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
+    </div>
+
+    <div class="box list-box">
+        <h2>
+            📱 Live Apps & Games 
+            <button onclick="loadApps()" class="refresh-btn">↻ Refresh</button>
+        </h2>
+        <div id="appList">
+            <div class="empty-state">Loading store data...</div>
+        </div>
+    </div>
+
 </div>
 
 <script>
     // ⚠️ PASTE YOUR LAMBDA URL HERE!
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
-    async function readIpaLightweight() {
-        const fileInput = document.getElementById('ipaFile');
-        const file = fileInput.files[0];
-        if (!file) return;
+    // --- INITIALIZATION ---
+    window.onload = loadApps; // Load list immediately when page opens
 
-        const bundleInput = document.getElementById('bundleId');
-        const versionInput = document.getElementById('version');
-        const sizeInput = document.getElementById('size');
-
-        // 1. Calculate Size (Instant)
-        const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1); 
-        sizeInput.value = fileSizeMB + " MB";
-
-        bundleInput.placeholder = "Searching inside IPA...";
-        bundleInput.classList.add('scanning');
+    // --- 1. FETCH & DISPLAY APPS ---
+    async function loadApps() {
+        const listDiv = document.getElementById('appList');
+        listDiv.innerHTML = '<div class="empty-state">Loading...</div>';
 
         try {
-            // 2. Load ZIP Directory (Does NOT read the whole file)
-            const zip = new JSZip();
-            const zipContent = await zip.loadAsync(file);
-
-            // 3. Find Info.plist anywhere in the zip
-            let plistFile = null;
-            
-            // Search for "Payload/Something.app/Info.plist"
-            zipContent.forEach((relativePath, zipEntry) => {
-                if (relativePath.endsWith("Info.plist") && relativePath.includes("Payload/")) {
-                    // Check if it's the main app, not a framework/plugin
-                    // A main app path usually looks like: Payload/App.app/Info.plist (2 levels deep)
-                    const parts = relativePath.split('/');
-                    if (parts.length === 3) {
-                        plistFile = zipEntry;
-                    }
-                }
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: "list_apps" })
             });
+            const apps = await res.json();
 
-            // If we couldn't find the main one, just grab the first Info.plist found
-            if (!plistFile) {
-                zipContent.forEach((relativePath, zipEntry) => {
-                    if (relativePath.endsWith("Info.plist")) plistFile = zipEntry;
-                });
+            listDiv.innerHTML = ""; // Clear loader
+            
+            if (apps.length === 0) {
+                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one!</div>';
+                return;
             }
 
-            if (!plistFile) throw new Error("Could not find Info.plist inside IPA");
-
-            // 4. Read Info.plist as text
-            const plistText = await plistFile.async("string");
-
-            // 5. Parse using Regex (Works for XML Plists - common in decrypted apps)
-            // Look for <key>CFBundleIdentifier</key> ... <string>VALUE</string>
-            const bundleMatch = plistText.match(/CFBundleIdentifier<\/key>[\s\S]*?<string>(.*?)<\/string>/);
-            const versionMatch = plistText.match(/CFBundleShortVersionString<\/key>[\s\S]*?<string>(.*?)<\/string>/);
-
-            if (bundleMatch && bundleMatch[1]) {
-                bundleInput.value = bundleMatch[1];
-            } else {
-                // If regex failed, it might be Binary Plist (bplist)
-                if (plistText.startsWith("bplist")) {
-                    alert("Info: This IPA uses a Binary Plist. Please enter Bundle ID manually.");
-                } else {
-                    bundleInput.value = "Unknown";
-                }
-            }
-
-            if (versionMatch && versionMatch[1]) {
-                versionInput.value = versionMatch[1];
-            } else {
-                versionInput.value = "1.0";
-            }
+            // Sort by newest first
+            apps.reverse().forEach(app => {
+                const item = document.createElement('div');
+                item.className = 'app-item';
+                item.innerHTML = `
+                    <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${app.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
+                    <div class="app-info">
+                        <div class="app-name">${app.name}</div>
+                        <div class="app-meta">${app.version} • ${app.size} • ${app.isGame ? '🎮 Game' : '📱 App'}</div>
+                        <div class="app-meta" style="color:#555; font-size:10px;">${app.bundleId}</div>
+                    </div>
+                    <button onclick="deleteApp('${app.bundleId}', '${app.name}')" class="delete-btn">Delete</button>
+                `;
+                listDiv.appendChild(item);
+            });
 
         } catch (err) {
             console.error(err);
-            // Don't annoy the user with an alert, just let them type
-            bundleInput.placeholder = "Enter Bundle ID";
-            versionInput.placeholder = "Enter Version";
-        } finally {
-            bundleInput.classList.remove('scanning');
+            listDiv.innerHTML = '<div class="empty-state" style="color:red">Error loading apps</div>';
         }
     }
 
+    // --- 2. DELETE APP ---
+    async function deleteApp(bundleId, name) {
+        if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: "delete_app", bundleId: bundleId })
+            });
+
+            if (res.ok) {
+                // Remove from UI instantly (makes it feel faster)
+                loadApps(); 
+            } else {
+                alert("Failed to delete.");
+            }
+        } catch (err) {
+            alert("Error: " + err.message);
+        }
+    }
+
+    // --- 3. AUTO-FILL LOGIC ---
+    function autoGenerateId() {
+        const name = document.getElementById('name').value;
+        const cleanName = name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+        if (cleanName.length > 0) document.getElementById('bundleId').value = "com.kurdestore." + cleanName;
+    }
+
+    function autoFillSize() {
+        const file = document.getElementById('ipaFile').files[0];
+        if (file) document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+    }
+
+    // --- 4. UPLOAD LOGIC ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
 
-        if (!iconFile || !ipaFile) return alert("Please select both files!");
-        if (!document.getElementById('name').value) return alert("Enter a name!");
+        if (!iconFile || !ipaFile || !document.getElementById('name').value) return alert("Please fill all fields!");
 
         btn.disabled = true;
         btn.innerText = "⏳ Uploading...";
 
         try {
-            // 1. Upload Icon
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-            
-            // 2. Upload IPA
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            // 3. Save to DynamoDB
-            btn.innerText = "💾 Saving...";
-            
             const data = {
                 action: "save_item",
                 name: document.getElementById('name').value,
                 bundleId: document.getElementById('bundleId').value,
-                version: document.getElementById('version').value,
+                version: document.getElementById('version').value || "1.0",
                 size: document.getElementById('size').value,
                 desc: document.getElementById('desc').value,
                 isGame: document.getElementById('isGame').value === 'true',
@@ -169,45 +202,29 @@
                 ipaKey: ipaKey
             };
 
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify(data)
-            });
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) });
 
             if (res.ok) {
-                alert("✅ Success! App added to store.");
-                location.reload();
+                btn.innerText = "✅ Done!";
+                document.getElementById('name').value = ""; // Clear form
+                loadApps(); // Refresh the list on the right!
+                setTimeout(() => { btn.disabled = false; btn.innerText = "Upload to Store"; }, 2000);
             } else {
-                alert("❌ Database Error!");
+                alert("Database Error!");
             }
-
         } catch (err) {
-            console.error(err);
             alert("Error: " + err.message);
-        } finally {
             btn.disabled = false;
-            btn.innerText = "Upload to Store";
         }
     }
 
     async function uploadFile(file, folder, barId) {
         const res = await fetch(API_URL, {
             method: 'POST',
-            body: JSON.stringify({
-                action: 'get_url',
-                fileName: file.name,
-                fileType: folder,
-                contentType: file.type
-            })
+            body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type })
         });
         const { uploadUrl, key } = await res.json();
-
-        await fetch(uploadUrl, {
-            method: 'PUT',
-            body: file,
-            headers: { 'Content-Type': file.type }
-        });
-
+        await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
         document.getElementById(barId).style.width = "100%";
         return key;
     }
