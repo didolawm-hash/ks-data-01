@@ -152,34 +152,63 @@
     }
 
     async function startUpload() {
-        const btn = document.getElementById('btn');
-        const iconFile = document.getElementById('iconFile').files[0];
-        const ipaFile = document.getElementById('ipaFile').files[0];
-        if(!iconFile || !ipaFile || !document.getElementById('name').value) { return updateStatus("Error: Missing files or name!", true); }
-        btn.disabled = true;
-        updateStatus("Starting upload process...");
-        try {
-            const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-            const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
-            const saveRes = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: "save_item",
-                    name: document.getElementById('name').value,
-                    bundleId: document.getElementById('bundleId').value,
-                    version: document.getElementById('version').value,
-                    size: document.getElementById('size').value,
-                    isGame: document.getElementById('isGame').value === "true",
-                    iconKey: iconKey, 
-                    ipaKey: ipaKey
-                })
-            });
-            if(saveRes.ok) {
-                updateStatus("✅ SUCCESS: Added to KurdeStore!");
-                setTimeout(() => location.reload(), 1500);
-            } else { throw new Error("Database error"); }
-        } catch (err) { updateStatus(`❌ FAILED: ${err.message}`, true); btn.disabled = false; }
+    const btn = document.getElementById('btn');
+    const iconFile = document.getElementById('iconFile').files[0];
+    const ipaFile = document.getElementById('ipaFile').files[0];
+    
+    // Get values from inputs
+    const name = document.getElementById('name').value;
+    const bId = document.getElementById('bundleId').value;
+    const vers = document.getElementById('version').value;
+    const sz = document.getElementById('size').value;
+    const isG = document.getElementById('isGame').value;
+
+    // VALIDATION: Ensure we have the Partition Key (appId/bundleId)
+    if(!iconFile || !ipaFile || !name || !bId) { 
+        return updateStatus("Error: Missing Icon, IPA, Name, or Bundle ID!", true); 
     }
+
+    btn.disabled = true;
+    updateStatus("Starting upload process...");
+
+    try {
+        const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+        const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+
+        updateStatus("Saving to Store Database...");
+
+        const payload = {
+            action: "save_item",
+            name: name,
+            bundleId: bId,
+            appId: bId, // This maps to your DynamoDB Partition Key
+            version: vers,
+            size: sz,
+            isGame: isG === "true",
+            iconKey: iconKey, 
+            ipaKey: ipaKey
+        };
+
+        const saveRes = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        const result = await saveRes.json();
+
+        if(saveRes.ok) {
+            updateStatus("✅ SUCCESS: Added to KurdeStore!");
+            setTimeout(() => location.reload(), 1500);
+        } else { 
+            // This will show the actual error message from Lambda/DynamoDB
+            throw new Error(result.error || "Database rejected the item."); 
+        }
+    } catch (err) { 
+        console.error("Upload Error Details:", err);
+        updateStatus(`❌ FAILED: ${err.message}`, true); 
+        btn.disabled = false; 
+    }
+}
 
     async function uploadFile(file, folder, barId) {
         const bar = document.getElementById(barId);
