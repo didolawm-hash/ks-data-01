@@ -99,36 +99,37 @@
     }
 
     function renderLists(items) {
-        const appsDiv = document.getElementById('appsList');
-        const gamesDiv = document.getElementById('gamesList');
-        appsDiv.innerHTML = "";
-        gamesDiv.innerHTML = "";
+    const appsDiv = document.getElementById('appsList');
+    const gamesDiv = document.getElementById('gamesList');
+    appsDiv.innerHTML = "";
+    gamesDiv.innerHTML = "";
 
-        items.forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'app-item';
-            
-            // Path-Style URL Fix
-            const iconSrc = `https://s3.eu-west-2.amazonaws.com/kurde-store-data/${item.iconKey}`;
-            
-            card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" 
-                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
-                <div class="app-info">
-                    <div class="app-name">${item.name}</div>
-                    <div class="app-meta">${item.version} • ${item.size}</div>
-                    <div class="app-meta" style="color:#444">${item.bundleId}</div>
-                </div>
-                <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
-            `;
+    items.forEach(item => {
+        const card = document.createElement('div');
+        card.className = 'app-item';
+        
+        // --- NEW URL FORMAT ---
+        // This is the standard AWS format: https://BUCKET.s3.REGION.amazonaws.com/KEY
+        const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
+        
+        card.innerHTML = `
+            <img src="${iconSrc}" class="app-icon" 
+                 onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
+            <div class="app-info">
+                <div class="app-name">${item.name}</div>
+                <div class="app-meta">${item.version} • ${item.size}</div>
+                <div class="app-meta" style="color:#555; font-size:10px;">${item.bundleId}</div>
+            </div>
+            <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+        `;
 
-            if (item.isGame === true || item.isGame === "true") {
-                gamesDiv.appendChild(card);
-            } else {
-                appsDiv.appendChild(card);
-            }
-        });
-    }
+        if (item.isGame === true || item.isGame === "true") {
+            gamesDiv.appendChild(card);
+        } else {
+            appsDiv.appendChild(card);
+        }
+    });
+}
 
     function filterList() {
         const query = document.getElementById('searchInput').value.toLowerCase();
