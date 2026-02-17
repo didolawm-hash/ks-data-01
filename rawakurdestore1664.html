@@ -85,18 +85,31 @@
     window.onload = loadApps;
 
     async function loadApps() {
-        try {
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({ action: "list_apps" })
-            });
-            allItems = await res.json();
-            renderLists(allItems);
-        } catch (err) {
-            console.error("Load error:", err);
-            document.getElementById('appsList').innerHTML = "<p style='color:red'>Failed to connect to Lambda.</p>";
+    const appsDiv = document.getElementById('appsList');
+    try {
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            mode: 'cors', // Explicitly allow CORS
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: "list_apps" })
+        });
+
+        if (!res.ok) {
+            throw new Error(`HTTP Error: ${res.status}`);
         }
+
+        allItems = await res.json();
+        renderLists(allItems);
+    } catch (err) {
+        console.error("Connection Error:", err);
+        appsDiv.innerHTML = `<p style='color:#ff3b30; text-align:center; padding:10px;'>
+            ⚠️ Failed to connect to Lambda.<br>
+            <span style="font-size:10px; color:#666;">Check CORS settings and Function URL.</span>
+        </p>`;
     }
+}
 
     function renderLists(items) {
     const appsDiv = document.getElementById('appsList');
