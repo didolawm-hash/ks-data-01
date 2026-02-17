@@ -10,7 +10,6 @@
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
         
-        /* Search Bar */
         .search-container { margin-bottom: 20px; display: flex; gap: 10px; }
         .search-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; outline: none; }
         .search-input:focus { border-color: #0a84ff; }
@@ -21,7 +20,6 @@
         .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
         .primary-btn:hover { background: #0070e0; transform: scale(1.01); }
 
-        /* Split Sections */
         h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
         
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
@@ -82,7 +80,7 @@
 
 <script>
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
-    let allItems = []; // Local cache for searching
+    let allItems = [];
 
     window.onload = loadApps;
 
@@ -109,11 +107,13 @@
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            // Use iconKey directly if the full URL is failing
+            
+            // Path-Style URL Fix
             const iconSrc = `https://s3.eu-west-2.amazonaws.com/kurde-store-data/${item.iconKey}`;
             
             card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/50?text=No+Icon'">
+                <img src="${iconSrc}" class="app-icon" 
+                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-meta">${item.version} • ${item.size}</div>
