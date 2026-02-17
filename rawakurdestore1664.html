@@ -104,13 +104,19 @@
     appsDiv.innerHTML = "";
     gamesDiv.innerHTML = "";
 
+    if (!Array.isArray(items) || items.length === 0) {
+        appsDiv.innerHTML = "<div class='empty-state'>No items found.</div>";
+        return;
+    }
+
     items.forEach(item => {
         const card = document.createElement('div');
         card.className = 'app-item';
         
-        // --- NEW URL FORMAT ---
-        // This is the standard AWS format: https://BUCKET.s3.REGION.amazonaws.com/KEY
-        const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
+        // --- THE FIX ---
+        // Your Lambda saves the full URL in "item.icon"
+        // If that is missing, it falls back to building it from "item.iconKey"
+        const iconSrc = item.icon ? item.icon : `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
         
         card.innerHTML = `
             <img src="${iconSrc}" class="app-icon" 
@@ -118,11 +124,12 @@
             <div class="app-info">
                 <div class="app-name">${item.name}</div>
                 <div class="app-meta">${item.version} • ${item.size}</div>
-                <div class="app-meta" style="color:#555; font-size:10px;">${item.bundleId}</div>
+                <div class="app-meta" style="color:#555; font-size:10px;">${item.appId}</div>
             </div>
-            <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+            <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
         `;
 
+        // Check category (isGame can be a boolean or a string "true")
         if (item.isGame === true || item.isGame === "true") {
             gamesDiv.appendChild(card);
         } else {
