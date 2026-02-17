@@ -5,16 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KurdeStore Admin Dashboard</title>
     <style>
-        body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; }
+        body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        /* LAYOUT: Two Columns */
-        .container { display: flex; gap: 30px; max-width: 1200px; margin: 0 auto; align-items: flex-start; }
+        /* LAYOUT: Single Column, Stacked */
+        .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 30px; }
         
         /* CARD STYLING */
         .box { background: #1e1e1e; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333; }
-        .upload-box { flex: 1; max-width: 450px; position: sticky; top: 20px; }
-        .list-box { flex: 1.5; min-height: 80vh; }
-
+        
         h2 { margin-top: 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; }
         .refresh-btn { margin-left: auto; background: none; border: 1px solid #333; padding: 5px 10px; font-size: 14px; color: #aaa; cursor: pointer; border-radius: 6px; }
         .refresh-btn:hover { background: #333; color: white; }
@@ -33,7 +31,7 @@
         .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
         .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s ease; }
 
-        /* APP LIST (RIGHT SIDE) */
+        /* APP LIST */
         .app-item { display: flex; align-items: center; background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #333; transition: transform 0.1s; }
         .app-item:hover { transform: translateY(-2px); border-color: #555; }
         
@@ -45,15 +43,14 @@
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
         .delete-btn:hover { background: #ff3b30; color: white; }
 
-        /* Empty State */
-        .empty-state { text-align: center; color: #555; margin-top: 50px; }
+        .empty-state { text-align: center; color: #555; margin-top: 20px; padding: 20px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     
-    <div class="box upload-box">
+    <div class="box">
         <h2>🚀 Upload App</h2>
 
         <span class="label">1. Select Files</span>
@@ -82,7 +79,7 @@
         <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
     </div>
 
-    <div class="box list-box">
+    <div class="box">
         <h2>
             📱 Live Apps & Games 
             <button onclick="loadApps()" class="refresh-btn">↻ Refresh</button>
@@ -99,7 +96,7 @@
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
     // --- INITIALIZATION ---
-    window.onload = loadApps; // Load list immediately when page opens
+    window.onload = loadApps; 
 
     // --- 1. FETCH & DISPLAY APPS ---
     async function loadApps() {
@@ -107,16 +104,28 @@
         listDiv.innerHTML = '<div class="empty-state">Loading...</div>';
 
         try {
+            // We use action: 'list_apps' so the Lambda knows what to do
+            // But our Lambda defaults to scanning if it doesn't match anything else
             const res = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action: "list_apps" })
             });
-            const apps = await res.json();
 
-            listDiv.innerHTML = ""; // Clear loader
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error("Server Error: " + errText);
+            }
+
+            const apps = await res.json();
+            listDiv.innerHTML = ""; 
+
+            // Check if response has 'error' field
+            if (apps.error) {
+                throw new Error(apps.error);
+            }
             
-            if (apps.length === 0) {
-                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one!</div>';
+            if (!Array.isArray(apps) || apps.length === 0) {
+                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one above!</div>';
                 return;
             }
 
@@ -138,7 +147,7 @@
 
         } catch (err) {
             console.error(err);
-            listDiv.innerHTML = '<div class="empty-state" style="color:red">Error loading apps</div>';
+            listDiv.innerHTML = `<div class="empty-state" style="color:#ff3b30">Error: ${err.message}</div>`;
         }
     }
 
@@ -153,7 +162,6 @@
             });
 
             if (res.ok) {
-                // Remove from UI instantly (makes it feel faster)
                 loadApps(); 
             } else {
                 alert("Failed to delete.");
@@ -207,7 +215,7 @@
             if (res.ok) {
                 btn.innerText = "✅ Done!";
                 document.getElementById('name').value = ""; // Clear form
-                loadApps(); // Refresh the list on the right!
+                loadApps(); // Refresh the list!
                 setTimeout(() => { btn.disabled = false; btn.innerText = "Upload to Store"; }, 2000);
             } else {
                 alert("Database Error!");
