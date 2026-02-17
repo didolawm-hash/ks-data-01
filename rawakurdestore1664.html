@@ -7,31 +7,27 @@
     <style>
         body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        /* LAYOUT: Single Column, Stacked */
         .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 30px; }
         
-        /* CARD STYLING */
         .box { background: #1e1e1e; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333; }
         
         h2 { margin-top: 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; }
+        h3 { color: #888; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 20px; font-size: 14px; text-transform: uppercase; }
+
         .refresh-btn { margin-left: auto; background: none; border: 1px solid #333; padding: 5px 10px; font-size: 14px; color: #aaa; cursor: pointer; border-radius: 6px; }
         .refresh-btn:hover { background: #333; color: white; }
 
-        /* FORM INPUTS */
         input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
         input:focus { border-color: #0a84ff; outline: none; }
         .label { font-size: 12px; color: #888; margin-top: 10px; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
 
-        /* BUTTONS */
         .primary-btn { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; }
         .primary-btn:hover { background: #0070e0; }
         .primary-btn:disabled { background: #444; cursor: not-allowed; }
 
-        /* PROGRESS BARS */
         .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
         .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s ease; }
 
-        /* APP LIST */
         .app-item { display: flex; align-items: center; background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #333; transition: transform 0.1s; }
         .app-item:hover { transform: translateY(-2px); border-color: #555; }
         
@@ -43,7 +39,7 @@
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
         .delete-btn:hover { background: #ff3b30; color: white; }
 
-        .empty-state { text-align: center; color: #555; margin-top: 20px; padding: 20px; }
+        .empty-state { text-align: center; color: #555; padding: 10px; font-size: 13px; font-style: italic; }
     </style>
 </head>
 <body>
@@ -71,9 +67,10 @@
 
         <textarea id="desc" rows="3" placeholder="Description..."></textarea>
 
+        <span class="label">3. Category</span>
         <select id="isGame">
-            <option value="false">App</option>
-            <option value="true">Game</option>
+            <option value="false">📱 Application</option>
+            <option value="true">🎮 Game</option>
         </select>
 
         <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
@@ -81,11 +78,18 @@
 
     <div class="box">
         <h2>
-            📱 Live Apps & Games 
+            Manage Store
             <button onclick="loadApps()" class="refresh-btn">↻ Refresh</button>
         </h2>
-        <div id="appList">
-            <div class="empty-state">Loading store data...</div>
+        
+        <h3>📱 Apps</h3>
+        <div id="appsList">
+            <div class="empty-state">Loading...</div>
+        </div>
+
+        <h3>🎮 Games</h3>
+        <div id="gamesList">
+            <div class="empty-state">Loading...</div>
         </div>
     </div>
 
@@ -95,63 +99,69 @@
     // ⚠️ PASTE YOUR LAMBDA URL HERE!
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
-    // --- INITIALIZATION ---
     window.onload = loadApps; 
 
-    // --- 1. FETCH & DISPLAY APPS ---
     async function loadApps() {
-        const listDiv = document.getElementById('appList');
-        listDiv.innerHTML = '<div class="empty-state">Loading...</div>';
+        const appsListDiv = document.getElementById('appsList');
+        const gamesListDiv = document.getElementById('gamesList');
+        
+        appsListDiv.innerHTML = '<div class="empty-state">Loading...</div>';
+        gamesListDiv.innerHTML = '<div class="empty-state">Loading...</div>';
 
         try {
-            // We use action: 'list_apps' so the Lambda knows what to do
-            // But our Lambda defaults to scanning if it doesn't match anything else
             const res = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({ action: "list_apps" })
             });
 
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error("Server Error: " + errText);
-            }
+            if (!res.ok) throw new Error("Server Error");
 
-            const apps = await res.json();
-            listDiv.innerHTML = ""; 
-
-            // Check if response has 'error' field
-            if (apps.error) {
-                throw new Error(apps.error);
-            }
+            const items = await res.json();
             
-            if (!Array.isArray(apps) || apps.length === 0) {
-                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one above!</div>';
+            // Clear lists
+            appsListDiv.innerHTML = "";
+            gamesListDiv.innerHTML = "";
+
+            if (!Array.isArray(items) || items.length === 0) {
+                appsListDiv.innerHTML = '<div class="empty-state">No apps found.</div>';
+                gamesListDiv.innerHTML = '<div class="empty-state">No games found.</div>';
                 return;
             }
 
-            // Sort by newest first
-            apps.reverse().forEach(app => {
-                const item = document.createElement('div');
-                item.className = 'app-item';
-                item.innerHTML = `
-                    <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${app.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
-                    <div class="app-info">
-                        <div class="app-name">${app.name}</div>
-                        <div class="app-meta">${app.version} • ${app.size} • ${app.isGame ? '🎮 Game' : '📱 App'}</div>
-                        <div class="app-meta" style="color:#555; font-size:10px;">${app.bundleId}</div>
-                    </div>
-                    <button onclick="deleteApp('${app.bundleId}', '${app.name}')" class="delete-btn">Delete</button>
-                `;
-                listDiv.appendChild(item);
-            });
+            // FILTER: Separate Apps from Games
+            const apps = items.filter(item => item.isGame === false);
+            const games = items.filter(item => item.isGame === true);
+
+            // RENDER APPS
+            if (apps.length === 0) appsListDiv.innerHTML = '<div class="empty-state">No apps yet.</div>';
+            else apps.reverse().forEach(app => appsListDiv.appendChild(createItemCard(app)));
+
+            // RENDER GAMES
+            if (games.length === 0) gamesListDiv.innerHTML = '<div class="empty-state">No games yet.</div>';
+            else games.reverse().forEach(game => gamesListDiv.appendChild(createItemCard(game)));
 
         } catch (err) {
             console.error(err);
-            listDiv.innerHTML = `<div class="empty-state" style="color:#ff3b30">Error: ${err.message}</div>`;
+            appsListDiv.innerHTML = `<div class="empty-state" style="color:red">Error loading data</div>`;
+            gamesListDiv.innerHTML = "";
         }
     }
 
-    // --- 2. DELETE APP ---
+    function createItemCard(item) {
+        const div = document.createElement('div');
+        div.className = 'app-item';
+        div.innerHTML = `
+            <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${item.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
+            <div class="app-info">
+                <div class="app-name">${item.name}</div>
+                <div class="app-meta">${item.version} • ${item.size}</div>
+                <div class="app-meta" style="color:#555; font-size:10px;">${item.bundleId}</div>
+            </div>
+            <button onclick="deleteApp('${item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+        `;
+        return div;
+    }
+
     async function deleteApp(bundleId, name) {
         if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
 
@@ -171,7 +181,7 @@
         }
     }
 
-    // --- 3. AUTO-FILL LOGIC ---
+    // --- AUTO-FILL & UPLOAD LOGIC ---
     function autoGenerateId() {
         const name = document.getElementById('name').value;
         const cleanName = name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -183,7 +193,6 @@
         if (file) document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
     }
 
-    // --- 4. UPLOAD LOGIC ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
@@ -205,7 +214,7 @@
                 version: document.getElementById('version').value || "1.0",
                 size: document.getElementById('size').value,
                 desc: document.getElementById('desc').value,
-                isGame: document.getElementById('isGame').value === 'true',
+                isGame: document.getElementById('isGame').value === 'true', // Correctly saves True/False
                 iconKey: iconKey,
                 ipaKey: ipaKey
             };
@@ -214,8 +223,8 @@
 
             if (res.ok) {
                 btn.innerText = "✅ Done!";
-                document.getElementById('name').value = ""; // Clear form
-                loadApps(); // Refresh the list!
+                document.getElementById('name').value = ""; 
+                loadApps(); 
                 setTimeout(() => { btn.disabled = false; btn.innerText = "Upload to Store"; }, 2000);
             } else {
                 alert("Database Error!");
