@@ -41,20 +41,22 @@
 <div class="container">
     <div class="box">
         <h2>🚀 Upload App</h2>
-        <span class="label">Icon Selection</span>
+        
+        <span class="label">Step 1: Icon</span>
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
-        <span class="label">IPA Selection</span>
+        <span class="label">Step 2: IPA File</span>
         <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillSize()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
-        <span class="label">Details</span>
-        <input type="text" id="name" placeholder="App Name" oninput="autoGenerateId()">
-        <input type="text" id="bundleId" placeholder="Bundle ID">
+        <span class="label">Step 3: App Details</span>
+        <input type="text" id="name" placeholder="App Name (e.g., Video Star)" oninput="autoGenerateId()">
+        <input type="text" id="bundleId" placeholder="Bundle ID (com.kurdestore.app)">
+        
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version" value="1.0">
-            <input type="text" id="size" placeholder="Size" readonly>
+            <input type="text" id="size" placeholder="Size (e.g., 50 MB)" readonly>
         </div>
 
         <select id="isGame">
@@ -85,6 +87,26 @@
 
     window.onload = loadApps;
 
+    // --- AUTO-FILL FUNCTIONS (THE ONES YOU MISSED!) ---
+    function autoGenerateId() {
+        const nameValue = document.getElementById('name').value;
+        // Removes spaces/special chars and makes lowercase
+        const cleanName = nameValue.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (cleanName) {
+            document.getElementById('bundleId').value = "com.kurdestore." + cleanName;
+        }
+    }
+
+    function autoFillSize() {
+        const file = document.getElementById('ipaFile').files[0];
+        if (file) {
+            // Converts bytes to MB
+            const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
+            document.getElementById('size').value = sizeInMB + " MB";
+        }
+    }
+
+    // --- LOAD & RENDER ---
     async function loadApps() {
         try {
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
@@ -104,17 +126,14 @@
             const card = document.createElement('div');
             card.className = 'app-item';
             
-            // --- THE ICON FIX ---
-            // 1. Get the raw key (e.g., "icons/123_img.png")
+            // Icon Fix: Extract filename and build clean S3 URL
             let rawKey = item.iconKey || "";
-            // 2. Remove any extra "icons/" prefix if it's already there
             let cleanFileName = rawKey.split('/').pop(); 
-            // 3. Build the final URL
             const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
             
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" 
-                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Error';">
+                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-meta">${item.version} • ${item.size}</div>
@@ -131,39 +150,31 @@
         });
     }
 
+    // --- SEARCH & DELETE ---
     function filterList() {
         const query = document.getElementById('searchInput').value.toLowerCase();
         renderLists(allData.filter(i => i.name.toLowerCase().includes(query)));
     }
 
     async function deleteApp(id, name) {
-        if (!confirm(`Delete ${name}?`)) return;
+        if (!confirm(`Are you sure you want to delete ${name}?`)) return;
         try {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         } catch (e) { alert("Delete failed"); }
     }
 
-    function autoGenerateId() {
-        const name = document.getElementById('name').value;
-        document.getElementById('bundleId').value = "com.kurdestore." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    }
-
-    function autoFillSize() {
-        const file = document.getElementById('ipaFile').files[0];
-        if (file) document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-    }
-
+    // --- UPLOAD CORE ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
 
         if(!iconFile || !ipaFile || !document.getElementById('name').value) {
-            return alert("Please select files and enter a name.");
+            return alert("Error: Please select both files and enter an app name.");
         }
 
-        btn.disabled = true; btn.innerText = "Uploading...";
+        btn.disabled = true; btn.innerText = "⏳ Uploading to AWS...";
 
         try {
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
@@ -186,8 +197,7 @@
             btn.innerText = "✅ Success!";
             setTimeout(() => location.reload(), 1000);
         } catch (err) {
-            alert("Upload failed! Check Console.");
-            console.error(err);
+            alert("Upload failed! Check browser console for errors.");
             btn.disabled = false;
             btn.innerText = "Upload to Store";
         }
@@ -200,7 +210,6 @@
         });
         const { uploadUrl, key } = await res.json();
         
-        // Progress bar logic
         await fetch(uploadUrl, { 
             method: 'PUT', 
             body: file, 
