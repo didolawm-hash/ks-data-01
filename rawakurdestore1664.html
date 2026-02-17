@@ -13,19 +13,17 @@
         #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #000; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #30d158; }
         
         input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; font-family: inherit; }
-        textarea { height: 100px; resize: vertical; } /* Style for the description box */
+        textarea { height: 80px; resize: vertical; }
         
         .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
         .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
         .primary-btn:hover { background: #0070e0; }
-        .primary-btn:disabled { background: #444; cursor: not-allowed; }
         
         .bar-container { width: 100%; height: 6px; background: #333; border-radius: 10px; margin: 5px 0 15px 0; overflow: hidden; }
         .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
         
-        h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
-        .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #000; }
+        .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
         .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; }
@@ -38,24 +36,21 @@
 <div class="container">
     <div class="box">
         <h2>🚀 Upload App</h2>
-        <div id="status-box">Ready to upload...</div>
+        <div id="status-box">Ready to sync...</div>
 
-        <span class="label">Step 1: Icon</span>
-        <input type="file" id="iconFile" accept="image/*">
+        <span class="label">Files</span>
+        <input type="file" id="iconFile" accept="image/*" placeholder="Icon">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
-        <span class="label">Step 2: IPA File</span>
         <input type="file" id="ipaFile" accept=".ipa" onchange="handleIpaSelection()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
-        <span class="label">Step 3: Details</span>
-        <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
-        <input type="text" id="subtitle" placeholder="Subtitle (e.g. Pro - Editor)">
+        <span class="label">Metadata (Visible in Store)</span>
+        <input type="text" id="name" placeholder="Display Name">
+        <input type="text" id="info" placeholder="Subtitle (Appears under Name)"> <textarea id="desc" placeholder="Full Description / Features"></textarea>
         
-        <textarea id="desc" placeholder="App Description (Tell users what this app does...)"></textarea>
-
-        <input type="text" id="bundleId" placeholder="Bundle ID (Auto-filled)">
-        
+        <span class="label">System Info</span>
+        <input type="text" id="bundleId" placeholder="Bundle ID">
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version">
             <input type="text" id="size" placeholder="Size" readonly>
@@ -72,9 +67,7 @@
     <div class="box">
         <h2>📦 Manage Store</h2>
         <input type="text" id="searchInput" style="width:100%; padding:12px; background:#252525; border:1px solid #333; color:white; border-radius:10px; margin-bottom:20px;" placeholder="Search..." oninput="filterList()">
-        <h3>📱 Applications</h3>
         <div id="appsList"></div>
-        <h3>🎮 Games</h3>
         <div id="gamesList"></div>
     </div>
 </div>
@@ -89,19 +82,18 @@
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-        updateStatus("Scanning IPA...");
         try {
             const zip = await JSZip.loadAsync(file);
             const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes(".app/"));
             if (plistFile) {
                 const content = await zip.files[plistFile].async("string");
-                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
-                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) || content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
+                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
                 if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
                 if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
-                updateStatus("✅ Metadata Loaded");
+                updateStatus("✅ Metadata Found");
             }
-        } catch (err) { updateStatus("⚠️ Scan failed.", true); }
+        } catch (e) { updateStatus("⚠️ Scan Error", true); }
     }
 
     async function startUpload() {
@@ -109,50 +101,38 @@
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const name = document.getElementById('name').value;
-        const subtitle = document.getElementById('subtitle').value;
-        const description = document.getElementById('desc').value; // Get Description
+        const info = document.getElementById('info').value; // Get Subtitle info
+        const d = document.getElementById('desc').value;
         let bId = document.getElementById('bundleId').value;
-        let vers = document.getElementById('version').value;
 
-        if (!bId && name) bId = "com.kurde." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        if (!vers) vers = "1.0";
-
-        if(!iconFile || !ipaFile || !name || !bId) {
-            return updateStatus("❌ Error: Missing required fields!", true);
-        }
+        if(!iconFile || !ipaFile || !name) return updateStatus("❌ Required fields missing", true);
 
         btn.disabled = true;
-        updateStatus("Uploading to AWS...");
+        updateStatus("Processing Upload...");
 
         try {
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            updateStatus("Saving to Database...");
+            const payload = {
+                action: "save_item",
+                name: name,
+                info: info, // FIXED: Now sending as 'info' to match Video Star
+                desc: d,
+                bundleId: bId || ("com.kurde." + name.toLowerCase().replace(/\s+/g, '')),
+                appId: bId || ("com.kurde." + name.toLowerCase().replace(/\s+/g, '')),
+                version: document.getElementById('version').value || "1.0",
+                size: document.getElementById('size').value,
+                isGame: document.getElementById('isGame').value === "true",
+                iconKey: iconKey,
+                ipaKey: ipaKey
+            };
 
-            await fetch(API_URL, {
-                method: 'POST',
-                body: JSON.stringify({
-                    action: "save_item",
-                    name: name,
-                    subtitle: subtitle,
-                    desc: description, // Send Description to Lambda
-                    bundleId: bId,
-                    appId: bId, 
-                    version: vers,
-                    size: document.getElementById('size').value,
-                    isGame: document.getElementById('isGame').value === "true", 
-                    iconKey: iconKey, 
-                    ipaKey: ipaKey
-                })
-            });
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
 
-            updateStatus("✅ SUCCESS: App is Live!");
+            updateStatus("✅ App Added Successfully!");
             setTimeout(() => location.reload(), 2000);
-        } catch (err) {
-            updateStatus(`❌ FAILED: ${err.message}`, true);
-            btn.disabled = false;
-        }
+        } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
     }
 
     async function uploadFile(file, folder, barId) {
@@ -165,7 +145,6 @@
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
             xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
-            xhr.onerror = () => reject();
             xhr.send(file);
         });
     }
@@ -175,48 +154,45 @@
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
             allData = await res.json();
             renderLists(allData);
-        } catch (err) { console.error(err); }
+        } catch (e) { console.error(e); }
     }
 
     function renderLists(items) {
-        const appsDiv = document.getElementById('appsList');
-        const gamesDiv = document.getElementById('gamesList');
-        appsDiv.innerHTML = ""; gamesDiv.innerHTML = "";
+        const aList = document.getElementById('appsList');
+        const gList = document.getElementById('gamesList');
+        aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
             let iconSrc = item.icon || `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${(item.iconKey || "").split('/').pop()}`;
             card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';">
+                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
-                    <div class="app-subtitle">${item.subtitle || ''}</div>
-                    <div class="app-meta">${item.version} • ${item.size}</div>
+                    <div class="app-subtitle">${item.info || ''}</div> <div class="app-meta">${item.version} • ${item.size}</div>
                 </div>
                 <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
             `;
-            const isGame = (item.isGame === true || item.isGame === "true");
-            isGame ? gamesDiv.appendChild(card) : appsDiv.appendChild(card);
+            (item.isGame === true || item.isGame === "true") ? gList.appendChild(card) : aList.appendChild(card);
         });
     }
 
     async function deleteApp(id, name) {
-        if (!confirm(`Delete ${name}?`)) return;
-        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
-        loadApps();
+        if (confirm(`Delete ${name}?`)) {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
+            loadApps();
+        }
     }
 
     function filterList() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => i.name.toLowerCase().includes(query)));
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        renderLists(allData.filter(i => i.name.toLowerCase().includes(q)));
     }
 
-    function updateStatus(msg, isError = false) {
-        const box = document.getElementById('status-box');
-        box.style.display = 'block';
-        box.style.color = isError ? '#ff3b30' : '#30d158';
-        box.style.borderLeftColor = isError ? '#ff3b30' : '#0a84ff';
-        box.innerHTML = `> ${msg}`;
+    function updateStatus(m, e=false) {
+        const b = document.getElementById('status-box');
+        b.style.display = 'block'; b.style.color = e ? '#ff3b30' : '#30d158';
+        b.innerHTML = "> " + m;
     }
 </script>
 </body>
