@@ -78,53 +78,102 @@
 
     window.onload = loadApps;
 
-    // --- NEW SMART IPA SCANNER ---
+    // --- 1. SMART IPA SCANNER + FALLBACK ---
     async function handleIpaSelection() {
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
 
-        // 1. Fill Size
+        // Auto-fill Size
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-        
-        updateStatus("Scanning IPA content for metadata...");
+        updateStatus("Scanning IPA content...");
 
         try {
             const zip = await JSZip.loadAsync(file);
-            // Look for Info.plist in the Payload/AppName.app/ directory
-            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes("Payload/") && path.split('/').length === 4);
+            // Search for Info.plist
+            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes("Payload/"));
             
             if (plistFile) {
                 const content = await zip.files[plistFile].async("string");
                 
-                // Extract Bundle ID
-                const bundleMatch = content.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
-                if (bundleMatch) document.getElementById('bundleId').value = bundleMatch[1];
+                // Regex to find Bundle ID
+                const bMatch = content.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+                if (bMatch) document.getElementById('bundleId').value = bMatch[1];
 
-                // Extract Version
-                const versionMatch = content.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-                if (versionMatch) document.getElementById('version').value = versionMatch[1];
+                // Regex to find Version
+                const vMatch = content.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
+                if (vMatch) document.getElementById('version').value = vMatch[1];
                 
-                updateStatus("✅ Metadata loaded from Info.plist");
+                updateStatus("✅ IPA Metadata Loaded");
             } else {
-                updateStatus("⚠️ Info.plist not found. Please enter details manually.", true);
+                updateStatus("⚠️ Info.plist not found. Using auto-fill instead.");
+                autoGenerateId(); // Fallback if plist is missing
             }
         } catch (err) {
-            console.error(err);
-            updateStatus("⚠️ Failed to scan IPA. Please enter details manually.", true);
+            updateStatus("⚠️ Scan failed. Using auto-fill.");
+            autoGenerateId();
         }
     }
 
-    // [Keep the rest of your script (loadApps, renderLists, startUpload, etc.) exactly as it was]
-    // Note: Removed autoGenerateId() as per your request to use actual IPA data instead.
-
-    function updateStatus(msg, isError = false) {
-        const box = document.getElementById('status-box');
-        box.style.display = 'block';
-        box.style.color = isError ? '#ff3b30' : '#30d158';
-        box.style.borderLeftColor = isError ? '#ff3b30' : '#0a84ff';
-        box.innerHTML = `> ${msg}`;
+    // --- 2. THE NAME-BASED FALLBACK ---
+    function autoGenerateId() {
+        const nameInput = document.getElementById('name').value;
+        const bundleInput = document.getElementById('bundleId');
+        
+        // ONLY auto-fill if the box is currently empty
+        if (nameInput && !bundleInput.value) {
+            const cleanName = nameInput.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            bundleInput.value = "com.kurdestore." + cleanName;
+        }
     }
 
+    // --- 3. THE IMPROVED UPLOAD ---
+    async function startUpload() {
+        const btn = document.getElementById('btn');
+        const iconFile = document.getElementById('iconFile').files[0];
+        const ipaFile = document.getElementById('ipaFile').files[0];
+        const name = document.getElementById('name').value;
+        const bId = document.getElementById('bundleId').value;
+
+        // Validation Check
+        if(!iconFile || !ipaFile || !name || !bId) {
+            return updateStatus("❌ Error: Please check if Icon, IPA, Name, and Bundle ID are all filled!", true);
+        }
+
+        btn.disabled = true;
+        updateStatus("Uploading to AWS...");
+
+        try {
+            const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+            const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+
+            updateStatus("Saving to Database...");
+
+            const saveRes = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "save_item",
+                    name: name,
+                    bundleId: bId,
+                    appId: bId, // Vital for DynamoDB
+                    version: document.getElementById('version').value,
+                    size: document.getElementById('size').value,
+                    isGame: document.getElementById('isGame').value === "true", // Real Boolean
+                    iconKey: iconKey, 
+                    ipaKey: ipaKey
+                })
+            });
+
+            if(saveRes.ok) {
+                updateStatus("✅ SUCCESS: Added to Store!");
+                setTimeout(() => location.reload(), 1500);
+            } else { throw new Error("Database rejected the save."); }
+        } catch (err) {
+            updateStatus(`❌ FAILED: ${err.message}`, true);
+            btn.disabled = false;
+        }
+    }
+
+    // [Keep the rest of your helper functions: loadApps, renderLists, uploadFile, deleteApp, filterList]
     async function loadApps() {
         try {
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
@@ -151,65 +200,6 @@
         });
     }
 
-    async function startUpload() {
-    const btn = document.getElementById('btn');
-    const iconFile = document.getElementById('iconFile').files[0];
-    const ipaFile = document.getElementById('ipaFile').files[0];
-    
-    // Get values from inputs
-    const name = document.getElementById('name').value;
-    const bId = document.getElementById('bundleId').value;
-    const vers = document.getElementById('version').value;
-    const sz = document.getElementById('size').value;
-    const isG = document.getElementById('isGame').value;
-
-    // VALIDATION: Ensure we have the Partition Key (appId/bundleId)
-    if(!iconFile || !ipaFile || !name || !bId) { 
-        return updateStatus("Error: Missing Icon, IPA, Name, or Bundle ID!", true); 
-    }
-
-    btn.disabled = true;
-    updateStatus("Starting upload process...");
-
-    try {
-        const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-        const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
-
-        updateStatus("Saving to Store Database...");
-
-        const payload = {
-            action: "save_item",
-            name: name,
-            bundleId: bId,
-            appId: bId, // This maps to your DynamoDB Partition Key
-            version: vers,
-            size: sz,
-            isGame: isG === "true",
-            iconKey: iconKey, 
-            ipaKey: ipaKey
-        };
-
-        const saveRes = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
-
-        const result = await saveRes.json();
-
-        if(saveRes.ok) {
-            updateStatus("✅ SUCCESS: Added to KurdeStore!");
-            setTimeout(() => location.reload(), 1500);
-        } else { 
-            // This will show the actual error message from Lambda/DynamoDB
-            throw new Error(result.error || "Database rejected the item."); 
-        }
-    } catch (err) { 
-        console.error("Upload Error Details:", err);
-        updateStatus(`❌ FAILED: ${err.message}`, true); 
-        btn.disabled = false; 
-    }
-}
-
     async function uploadFile(file, folder, barId) {
         const bar = document.getElementById(barId);
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
@@ -235,6 +225,12 @@
         const query = document.getElementById('searchInput').value.toLowerCase();
         renderLists(allData.filter(i => i.name.toLowerCase().includes(query)));
     }
+
+    function updateStatus(msg, isError = false) {
+        const box = document.getElementById('status-box');
+        box.style.display = 'block';
+        box.style.color = isError ? '#ff3b30' : '#30d158';
+        box.style.borderLeftColor = isError ? '#ff3b30' : '#0a84ff';
+        box.innerHTML = `> ${msg}`;
+    }
 </script>
-</body>
-</html>
