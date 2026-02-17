@@ -80,33 +80,52 @@
 
     // --- 1. SMART IPA SCANNER ---
     async function handleIpaSelection() {
-        const file = document.getElementById('ipaFile').files[0];
-        if (!file) return;
+    const file = document.getElementById('ipaFile').files[0];
+    if (!file) return;
 
-        document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-        updateStatus("Scanning IPA content for Metadata...");
+    // Fill Size immediately
+    document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+    updateStatus("Reading IPA structure...");
 
-        try {
-            const zip = await JSZip.loadAsync(file);
-            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes("Payload/"));
+    try {
+        const zip = await JSZip.loadAsync(file);
+        // Look for the main Info.plist
+        const plistFile = Object.keys(zip.files).find(path => 
+            path.endsWith("Info.plist") && path.includes(".app/")
+        );
+        
+        if (plistFile) {
+            updateStatus("Found Info.plist. Decoding metadata...");
+            const content = await zip.files[plistFile].async("string");
             
-            if (plistFile) {
-                const content = await zip.files[plistFile].async("string");
-                
-                const bMatch = content.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
-                if (bMatch) document.getElementById('bundleId').value = bMatch[1];
+            // 1. Try to find Bundle ID
+            let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || 
+                         content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
+            
+            // 2. Try to find Version
+            let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) ||
+                         content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
 
-                const vMatch = content.match(/<key>CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-                if (vMatch) document.getElementById('version').value = vMatch[1];
-                
-                updateStatus("✅ Metadata Loaded from IPA");
-            } else {
-                updateStatus("⚠️ Info.plist not found. Ready for manual entry.");
+            if (bMatch) {
+                document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
             }
-        } catch (err) {
-            updateStatus("⚠️ Scan failed. You can type info manually.");
+            if (vMatch) {
+                document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
+            }
+
+            if (bMatch || vMatch) {
+                updateStatus("✅ IPA Metadata Loaded Successfully");
+            } else {
+                updateStatus("⚠️ Plist found but format is binary. Please enter manually.");
+            }
+        } else {
+            updateStatus("⚠️ No Info.plist found in this IPA.");
         }
+    } catch (err) {
+        console.error("IPA Error:", err);
+        updateStatus("⚠️ Error reading IPA file.", true);
     }
+}
 
     // --- 2. THE UPLOAD LOGIC (With Auto-Correction) ---
     async function startUpload() {
