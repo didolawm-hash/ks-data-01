@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KurdeStore Admin Panel</title>
-    <script src="https://unpkg.com/app-info-parser/dist/app-info-parser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
         body { background-color: #121212; color: white; font-family: sans-serif; display: flex; justify-content: center; padding-top: 50px; }
         .box { width: 400px; background: #1e1e1e; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
@@ -17,7 +17,6 @@
         .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; }
         .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.2s; }
         
-        /* Loading animation for auto-fill */
         .scanning { border-color: #0a84ff !important; animation: pulse 1s infinite; }
         @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0.4); } 70% { box-shadow: 0 0 0 5px rgba(10, 132, 255, 0); } 100% { box-shadow: 0 0 0 0 rgba(10, 132, 255, 0); } }
     </style>
@@ -32,16 +31,16 @@
     <div class="bar-container"><div class="bar" id="iconBar"></div></div>
 
     <span class="label">2. Select IPA File (.ipa)</span>
-    <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillIpaInfo()">
+    <input type="file" id="ipaFile" accept=".ipa" onchange="readIpaLightweight()">
     <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
     <hr style="border-color: #333; margin: 20px 0;">
 
     <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
     
-    <input type="text" id="bundleId" placeholder="Bundle ID (Auto-detecting...)">
-    <input type="text" id="version" placeholder="Version (Auto-detecting...)">
-    <input type="text" id="size" placeholder="Size (Auto-detecting...)">
+    <input type="text" id="bundleId" placeholder="Bundle ID (e.g. com.videostar)">
+    <input type="text" id="version" placeholder="Version (e.g. 1.2)">
+    <input type="text" id="size" placeholder="Size (e.g. 55MB)">
     
     <textarea id="desc" rows="3" placeholder="Description..."></textarea>
 
@@ -57,7 +56,7 @@
     // ⚠️ PASTE YOUR LAMBDA URL HERE!
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
 
-    async function autoFillIpaInfo() {
+    async function readIpaLightweight() {
         const fileInput = document.getElementById('ipaFile');
         const file = fileInput.files[0];
         if (!file) return;
@@ -66,41 +65,74 @@
         const versionInput = document.getElementById('version');
         const sizeInput = document.getElementById('size');
 
-        // 1. Auto-Calculate Size
+        // 1. Calculate Size (Instant)
         const fileSizeMB = (file.size / (1024 * 1024)).toFixed(1); 
         sizeInput.value = fileSizeMB + " MB";
 
-        bundleInput.placeholder = "Reading IPA...";
+        bundleInput.placeholder = "Searching inside IPA...";
         bundleInput.classList.add('scanning');
 
         try {
-            // 2. Check if Library Loaded
-            if (typeof AppInfoParser === 'undefined') {
-                throw new Error("Library failed to load. Check your internet or try again.");
+            // 2. Load ZIP Directory (Does NOT read the whole file)
+            const zip = new JSZip();
+            const zipContent = await zip.loadAsync(file);
+
+            // 3. Find Info.plist anywhere in the zip
+            let plistFile = null;
+            
+            // Search for "Payload/Something.app/Info.plist"
+            zipContent.forEach((relativePath, zipEntry) => {
+                if (relativePath.endsWith("Info.plist") && relativePath.includes("Payload/")) {
+                    // Check if it's the main app, not a framework/plugin
+                    // A main app path usually looks like: Payload/App.app/Info.plist (2 levels deep)
+                    const parts = relativePath.split('/');
+                    if (parts.length === 3) {
+                        plistFile = zipEntry;
+                    }
+                }
+            });
+
+            // If we couldn't find the main one, just grab the first Info.plist found
+            if (!plistFile) {
+                zipContent.forEach((relativePath, zipEntry) => {
+                    if (relativePath.endsWith("Info.plist")) plistFile = zipEntry;
+                });
             }
 
-            // 3. Parse IPA
-            const parser = new AppInfoParser(file);
-            const result = await parser.parse();
+            if (!plistFile) throw new Error("Could not find Info.plist inside IPA");
 
-            console.log("Parsed Result:", result); // Look at Console (F12) if this works
+            // 4. Read Info.plist as text
+            const plistText = await plistFile.async("string");
 
-            // 4. Fill Fields
-            if (result.CFBundleIdentifier) bundleInput.value = result.CFBundleIdentifier;
-            else if (result.package) bundleInput.value = result.package;
-            else bundleInput.value = "Unknown Bundle ID";
+            // 5. Parse using Regex (Works for XML Plists - common in decrypted apps)
+            // Look for <key>CFBundleIdentifier</key> ... <string>VALUE</string>
+            const bundleMatch = plistText.match(/CFBundleIdentifier<\/key>[\s\S]*?<string>(.*?)<\/string>/);
+            const versionMatch = plistText.match(/CFBundleShortVersionString<\/key>[\s\S]*?<string>(.*?)<\/string>/);
 
-            if (result.CFBundleShortVersionString) versionInput.value = result.CFBundleShortVersionString;
-            else if (result.version) versionInput.value = result.version;
-            else versionInput.value = "1.0";
+            if (bundleMatch && bundleMatch[1]) {
+                bundleInput.value = bundleMatch[1];
+            } else {
+                // If regex failed, it might be Binary Plist (bplist)
+                if (plistText.startsWith("bplist")) {
+                    alert("Info: This IPA uses a Binary Plist. Please enter Bundle ID manually.");
+                } else {
+                    bundleInput.value = "Unknown";
+                }
+            }
+
+            if (versionMatch && versionMatch[1]) {
+                versionInput.value = versionMatch[1];
+            } else {
+                versionInput.value = "1.0";
+            }
 
         } catch (err) {
-            console.error("Error reading IPA:", err);
-            // ⚠️ THIS WILL TELL YOU THE REAL ERROR
-            alert("Auto-Read Failed: " + err.message + "\n\nYou can still type details manually.");
+            console.error(err);
+            // Don't annoy the user with an alert, just let them type
+            bundleInput.placeholder = "Enter Bundle ID";
+            versionInput.placeholder = "Enter Version";
         } finally {
             bundleInput.classList.remove('scanning');
-            if (!bundleInput.value) bundleInput.placeholder = "Bundle ID (e.g. com.videostar)";
         }
     }
 
