@@ -3,149 +3,151 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KurdeStore Admin Dashboard</title>
+    <title>KurdeStore Pro Admin</title>
     <style>
-        body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 30px; }
-        .box { background: #1e1e1e; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333; }
-        h2 { margin-top: 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; }
-        .refresh-btn { margin-left: auto; background: none; border: 1px solid #333; padding: 5px 10px; font-size: 14px; color: #aaa; cursor: pointer; border-radius: 6px; }
-        .refresh-btn:hover { background: #333; color: white; }
-        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
-        input:focus { border-color: #0a84ff; outline: none; }
-        .label { font-size: 12px; color: #888; margin-top: 10px; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-        .primary-btn { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; }
-        .primary-btn:hover { background: #0070e0; }
-        .primary-btn:disabled { background: #444; cursor: not-allowed; }
-        .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
-        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s ease; }
-        .app-item { display: flex; align-items: center; background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #333; transition: transform 0.1s; }
-        .app-item:hover { transform: translateY(-2px); border-color: #555; }
-        .app-icon { width: 50px; height: 50px; border-radius: 10px; object-fit: cover; background: #000; margin-right: 15px; }
+        body { background-color: #0f0f0f; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 25px; }
+        .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
+        
+        /* Search Bar */
+        .search-container { margin-bottom: 20px; display: flex; gap: 10px; }
+        .search-input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; outline: none; }
+        .search-input:focus { border-color: #0a84ff; }
+
+        input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; }
+        .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
+        
+        .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
+        .primary-btn:hover { background: #0070e0; transform: scale(1.01); }
+
+        /* Split Sections */
+        h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
+        
+        .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
+        .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #000; }
         .app-info { flex: 1; }
-        .app-name { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
-        .app-meta { font-size: 12px; color: #888; }
-        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .app-name { font-weight: bold; font-size: 17px; }
+        .app-meta { font-size: 12px; color: #777; margin-top: 3px; }
+
+        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
         .delete-btn:hover { background: #ff3b30; color: white; }
-        .empty-state { text-align: center; color: #555; margin-top: 20px; padding: 20px; }
+
+        .bar-container { width: 100%; height: 4px; background: #333; border-radius: 2px; margin-top: 5px; overflow: hidden; }
+        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    
     <div class="box">
         <h2>🚀 Upload App</h2>
-        <span class="label">1. Select Files</span>
+        <span class="label">Icon & IPA</span>
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
+        
         <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillSize()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
-        <span class="label">2. App Details</span>
-        <input type="text" id="name" placeholder="App Name (e.g. Minecraft)" oninput="autoGenerateId()">
-        <input type="text" id="bundleId" placeholder="Bundle ID (Auto-Generated)">
+
+        <span class="label">App Info</span>
+        <input type="text" id="name" placeholder="App Name" oninput="autoGenerateId()">
+        <input type="text" id="bundleId" placeholder="Bundle ID">
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version" value="1.0">
             <input type="text" id="size" placeholder="Size" readonly>
         </div>
-        <textarea id="desc" rows="3" placeholder="Description..."></textarea>
+
         <select id="isGame">
-            <option value="false">App</option>
-            <option value="true">Game</option>
+            <option value="false">📱 Application</option>
+            <option value="true">🎮 Game</option>
         </select>
+
         <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
     </div>
 
     <div class="box">
-        <h2>
-            📱 Live Apps & Games 
-            <button onclick="loadApps()" class="refresh-btn">↻ Refresh</button>
-        </h2>
-        <div id="appList">
-            <div class="empty-state">Loading store data...</div>
+        <h2>📦 Manage Store</h2>
+        
+        <div class="search-container">
+            <input type="text" id="searchInput" class="search-input" placeholder="Search apps or games..." oninput="filterList()">
         </div>
-    </div>
 
+        <h3>📱 Applications</h3>
+        <div id="appsList"></div>
+
+        <h3>🎮 Games</h3>
+        <div id="gamesList"></div>
+    </div>
 </div>
 
 <script>
-    // ⚠️ PASTE YOUR LAMBDA URL HERE!
-    const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/"; 
+    const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
+    let allItems = []; // Local cache for searching
 
-    window.onload = loadApps; 
+    window.onload = loadApps;
 
     async function loadApps() {
-        const listDiv = document.getElementById('appList');
-        listDiv.innerHTML = '<div class="empty-state">Loading...</div>';
-
         try {
             const res = await fetch(API_URL, {
                 method: 'POST',
-                // FIX: Added Content-Type header
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: "list_apps" })
             });
-
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(errText || "Server Error");
-            }
-
-            const apps = await res.json();
-            listDiv.innerHTML = ""; 
-
-            if (apps.error) throw new Error(apps.error);
-            
-            if (!Array.isArray(apps) || apps.length === 0) {
-                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one above!</div>';
-                return;
-            }
-
-            apps.reverse().forEach(app => {
-                const item = document.createElement('div');
-                item.className = 'app-item';
-                item.innerHTML = `
-                    <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${app.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
-                    <div class="app-info">
-                        <div class="app-name">${app.name}</div>
-                        <div class="app-meta">${app.version} • ${app.size} • ${app.isGame ? '🎮 Game' : '📱 App'}</div>
-                        <div class="app-meta" style="color:#555; font-size:10px;">${app.bundleId}</div>
-                    </div>
-                    <button onclick="deleteApp('${app.bundleId}', '${app.name}')" class="delete-btn">Delete</button>
-                `;
-                listDiv.appendChild(item);
-            });
-
+            allItems = await res.json();
+            renderLists(allItems);
         } catch (err) {
-            console.error(err);
-            listDiv.innerHTML = `<div class="empty-state" style="color:#ff3b30">Error: ${err.message}</div>`;
+            console.error("Load error:", err);
+            document.getElementById('appsList').innerHTML = "<p style='color:red'>Failed to connect to Lambda.</p>";
         }
     }
 
-    async function deleteApp(bundleId, name) {
-        if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+    function renderLists(items) {
+        const appsDiv = document.getElementById('appsList');
+        const gamesDiv = document.getElementById('gamesList');
+        appsDiv.innerHTML = "";
+        gamesDiv.innerHTML = "";
 
-        try {
-            const res = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: "delete_app", bundleId: bundleId })
-            });
+        items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'app-item';
+            // Use iconKey directly if the full URL is failing
+            const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
+            
+            card.innerHTML = `
+                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/50?text=No+Icon'">
+                <div class="app-info">
+                    <div class="app-name">${item.name}</div>
+                    <div class="app-meta">${item.version} • ${item.size}</div>
+                    <div class="app-meta" style="color:#444">${item.bundleId}</div>
+                </div>
+                <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+            `;
 
-            if (res.ok) {
-                loadApps(); 
+            if (item.isGame === true || item.isGame === "true") {
+                gamesDiv.appendChild(card);
             } else {
-                alert("Failed to delete.");
+                appsDiv.appendChild(card);
             }
-        } catch (err) {
-            alert("Error: " + err.message);
-        }
+        });
+    }
+
+    function filterList() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = allItems.filter(i => i.name.toLowerCase().includes(query) || i.bundleId.toLowerCase().includes(query));
+        renderLists(filtered);
+    }
+
+    async function deleteApp(id, name) {
+        if (!confirm(`Delete ${name}?`)) return;
+        await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: "delete_app", bundleId: id })
+        });
+        loadApps();
     }
 
     function autoGenerateId() {
         const name = document.getElementById('name').value;
-        const cleanName = name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-        if (cleanName.length > 0) document.getElementById('bundleId').value = "com.kurdestore." + cleanName;
+        document.getElementById('bundleId').value = "com.kurdestore." + name.replace(/\s+/g, '').toLowerCase();
     }
 
     function autoFillSize() {
@@ -155,46 +157,34 @@
 
     async function startUpload() {
         const btn = document.getElementById('btn');
+        btn.disabled = true;
+        btn.innerText = "Uploading...";
+
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
-
-        if (!iconFile || !ipaFile || !document.getElementById('name').value) return alert("Please fill all fields!");
-
-        btn.disabled = true;
-        btn.innerText = "⏳ Uploading...";
 
         try {
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            const data = {
-                action: "save_item",
-                name: document.getElementById('name').value,
-                bundleId: document.getElementById('bundleId').value,
-                version: document.getElementById('version').value || "1.0",
-                size: document.getElementById('size').value,
-                desc: document.getElementById('desc').value,
-                isGame: document.getElementById('isGame').value === 'true',
-                iconKey: iconKey,
-                ipaKey: ipaKey
-            };
-
-            const res = await fetch(API_URL, { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data) 
+            await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({
+                    action: "save_item",
+                    name: document.getElementById('name').value,
+                    bundleId: document.getElementById('bundleId').value,
+                    version: document.getElementById('version').value,
+                    size: document.getElementById('size').value,
+                    isGame: document.getElementById('isGame').value === 'true',
+                    iconKey: iconKey,
+                    ipaKey: ipaKey
+                })
             });
-
-            if (res.ok) {
-                btn.innerText = "✅ Done!";
-                document.getElementById('name').value = ""; 
-                loadApps(); 
-                setTimeout(() => { btn.disabled = false; btn.innerText = "Upload to Store"; }, 2000);
-            } else {
-                alert("Database Error!");
-            }
+            
+            alert("Success!");
+            location.reload();
         } catch (err) {
-            alert("Error: " + err.message);
+            alert("Upload failed!");
             btn.disabled = false;
         }
     }
@@ -202,7 +192,6 @@
     async function uploadFile(file, folder, barId) {
         const res = await fetch(API_URL, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type })
         });
         const { uploadUrl, key } = await res.json();
@@ -211,6 +200,5 @@
         return key;
     }
 </script>
-
 </body>
 </html>
