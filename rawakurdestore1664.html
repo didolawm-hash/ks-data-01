@@ -11,21 +11,24 @@
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
         #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #000; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #30d158; }
-        .search-container { margin-bottom: 20px; }
-        .search-input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; outline: none; box-sizing: border-box; }
-        input, select { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; }
+        
+        input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; font-family: inherit; }
+        textarea { height: 100px; resize: vertical; } /* Style for the description box */
+        
         .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
         .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
         .primary-btn:hover { background: #0070e0; }
         .primary-btn:disabled { background: #444; cursor: not-allowed; }
+        
         .bar-container { width: 100%; height: 6px; background: #333; border-radius: 10px; margin: 5px 0 15px 0; overflow: hidden; }
         .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
+        
         h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
         .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #000; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
-        .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; } /* Style for subtitle */
+        .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; }
         .app-meta { font-size: 12px; color: #777; }
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
     </style>
@@ -41,13 +44,17 @@
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
-        <span class="label">Step 2: IPA File (Auto-scanning)</span>
+        <span class="label">Step 2: IPA File</span>
         <input type="file" id="ipaFile" accept=".ipa" onchange="handleIpaSelection()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
         <span class="label">Step 3: Details</span>
         <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
-        <input type="text" id="subtitle" placeholder="Subtitle (e.g. Pro - Editor)"> <input type="text" id="bundleId" placeholder="Bundle ID (Auto-filled)">
+        <input type="text" id="subtitle" placeholder="Subtitle (e.g. Pro - Editor)">
+        
+        <textarea id="desc" placeholder="App Description (Tell users what this app does...)"></textarea>
+
+        <input type="text" id="bundleId" placeholder="Bundle ID (Auto-filled)">
         
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version">
@@ -64,7 +71,7 @@
 
     <div class="box">
         <h2>📦 Manage Store</h2>
-        <input type="text" id="searchInput" class="search-input" placeholder="Search..." oninput="filterList()">
+        <input type="text" id="searchInput" style="width:100%; padding:12px; background:#252525; border:1px solid #333; color:white; border-radius:10px; margin-bottom:20px;" placeholder="Search..." oninput="filterList()">
         <h3>📱 Applications</h3>
         <div id="appsList"></div>
         <h3>🎮 Games</h3>
@@ -78,86 +85,58 @@
 
     window.onload = loadApps;
 
-    // --- 1. SMART IPA SCANNER ---
     async function handleIpaSelection() {
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
-
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-        updateStatus("Reading IPA structure...");
-
+        updateStatus("Scanning IPA...");
         try {
             const zip = await JSZip.loadAsync(file);
-            const plistFile = Object.keys(zip.files).find(path => 
-                path.endsWith("Info.plist") && path.includes(".app/")
-            );
-            
+            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes(".app/"));
             if (plistFile) {
-                updateStatus("Found Info.plist. Decoding metadata...");
                 const content = await zip.files[plistFile].async("string");
-                
-                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || 
-                             content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
-                
-                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) ||
-                             content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
-
+                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
+                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) || content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
                 if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
                 if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
-
-                if (bMatch || vMatch) {
-                    updateStatus("✅ IPA Metadata Loaded Successfully");
-                } else {
-                    updateStatus("⚠️ Plist format complex. Please check fields.");
-                }
-            } else {
-                updateStatus("⚠️ No Info.plist found.");
+                updateStatus("✅ Metadata Loaded");
             }
-        } catch (err) {
-            console.error(err);
-            updateStatus("⚠️ Error reading IPA.", true);
-        }
+        } catch (err) { updateStatus("⚠️ Scan failed.", true); }
     }
 
-    // --- 2. THE UPLOAD LOGIC ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const name = document.getElementById('name').value;
-        const subtitle = document.getElementById('subtitle').value; // Get Subtitle
+        const subtitle = document.getElementById('subtitle').value;
+        const description = document.getElementById('desc').value; // Get Description
         let bId = document.getElementById('bundleId').value;
         let vers = document.getElementById('version').value;
 
-        // Fallbacks
-        if (!bId && name) {
-            bId = "com.kurde." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-            document.getElementById('bundleId').value = bId;
-        }
-        if (!vers) {
-            vers = "1.0";
-            document.getElementById('version').value = vers;
-        }
+        if (!bId && name) bId = "com.kurde." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (!vers) vers = "1.0";
 
         if(!iconFile || !ipaFile || !name || !bId) {
-            return updateStatus("❌ Error: Missing Icon, IPA, or Name!", true);
+            return updateStatus("❌ Error: Missing required fields!", true);
         }
 
         btn.disabled = true;
-        updateStatus("Uploading files to AWS...");
+        updateStatus("Uploading to AWS...");
 
         try {
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            updateStatus("Finalizing Database entry...");
+            updateStatus("Saving to Database...");
 
-            const saveRes = await fetch(API_URL, {
+            await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({
                     action: "save_item",
                     name: name,
-                    subtitle: subtitle, // Send to Lambda
+                    subtitle: subtitle,
+                    desc: description, // Send Description to Lambda
                     bundleId: bId,
                     appId: bId, 
                     version: vers,
@@ -168,31 +147,23 @@
                 })
             });
 
-            if(saveRes.ok) {
-                updateStatus("✅ SUCCESS: App is Live!");
-                setTimeout(() => location.reload(), 2000);
-            } else { 
-                throw new Error("Database rejected the save.");
-            }
+            updateStatus("✅ SUCCESS: App is Live!");
+            setTimeout(() => location.reload(), 2000);
         } catch (err) {
             updateStatus(`❌ FAILED: ${err.message}`, true);
             btn.disabled = false;
         }
     }
 
-    // --- HELPERS ---
     async function uploadFile(file, folder, barId) {
         const bar = document.getElementById(barId);
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
         const { uploadUrl, key } = await res.json();
-        
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', uploadUrl);
             xhr.setRequestHeader('Content-Type', file.type);
-            xhr.upload.onprogress = (e) => { 
-                if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%";
-            };
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
             xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
             xhr.onerror = () => reject();
             xhr.send(file);
@@ -214,14 +185,7 @@
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            
-            let iconSrc = item.icon; 
-            if (!iconSrc && item.iconKey) {
-                let cleanFileName = item.iconKey.split('/').pop(); 
-                iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
-            }
-
-            // Displaying Subtitle in the info section
+            let iconSrc = item.icon || `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${(item.iconKey || "").split('/').pop()}`;
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';">
                 <div class="app-info">
