@@ -6,40 +6,28 @@
     <title>KurdeStore Admin Dashboard</title>
     <style>
         body { background-color: #121212; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
         .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 30px; }
-        
         .box { background: #1e1e1e; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); border: 1px solid #333; }
-        
         h2 { margin-top: 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; }
-        h3 { color: #888; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 20px; font-size: 14px; text-transform: uppercase; }
-
         .refresh-btn { margin-left: auto; background: none; border: 1px solid #333; padding: 5px 10px; font-size: 14px; color: #aaa; cursor: pointer; border-radius: 6px; }
         .refresh-btn:hover { background: #333; color: white; }
-
         input, textarea, select { width: 100%; padding: 12px; margin: 8px 0; background: #2c2c2c; border: 1px solid #333; color: white; border-radius: 8px; box-sizing: border-box; font-size: 14px; }
         input:focus { border-color: #0a84ff; outline: none; }
         .label { font-size: 12px; color: #888; margin-top: 10px; display: block; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-
         .primary-btn { width: 100%; padding: 14px; background: #0a84ff; color: white; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: background 0.2s; }
         .primary-btn:hover { background: #0070e0; }
         .primary-btn:disabled { background: #444; cursor: not-allowed; }
-
         .bar-container { width: 100%; height: 4px; background: #333; margin-top: 5px; border-radius: 2px; overflow: hidden; }
         .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s ease; }
-
         .app-item { display: flex; align-items: center; background: #252525; padding: 15px; margin-bottom: 10px; border-radius: 10px; border: 1px solid #333; transition: transform 0.1s; }
         .app-item:hover { transform: translateY(-2px); border-color: #555; }
-        
         .app-icon { width: 50px; height: 50px; border-radius: 10px; object-fit: cover; background: #000; margin-right: 15px; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 16px; margin-bottom: 4px; }
         .app-meta { font-size: 12px; color: #888; }
-        
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
         .delete-btn:hover { background: #ff3b30; color: white; }
-
-        .empty-state { text-align: center; color: #555; padding: 10px; font-size: 13px; font-style: italic; }
+        .empty-state { text-align: center; color: #555; margin-top: 20px; padding: 20px; }
     </style>
 </head>
 <body>
@@ -48,48 +36,33 @@
     
     <div class="box">
         <h2>🚀 Upload App</h2>
-
         <span class="label">1. Select Files</span>
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
-
         <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillSize()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
-
         <span class="label">2. App Details</span>
         <input type="text" id="name" placeholder="App Name (e.g. Minecraft)" oninput="autoGenerateId()">
         <input type="text" id="bundleId" placeholder="Bundle ID (Auto-Generated)">
-        
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version" value="1.0">
             <input type="text" id="size" placeholder="Size" readonly>
         </div>
-
         <textarea id="desc" rows="3" placeholder="Description..."></textarea>
-
-        <span class="label">3. Category</span>
         <select id="isGame">
-            <option value="false">📱 Application</option>
-            <option value="true">🎮 Game</option>
+            <option value="false">App</option>
+            <option value="true">Game</option>
         </select>
-
         <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
     </div>
 
     <div class="box">
         <h2>
-            Manage Store
+            📱 Live Apps & Games 
             <button onclick="loadApps()" class="refresh-btn">↻ Refresh</button>
         </h2>
-        
-        <h3>📱 Apps</h3>
-        <div id="appsList">
-            <div class="empty-state">Loading...</div>
-        </div>
-
-        <h3>🎮 Games</h3>
-        <div id="gamesList">
-            <div class="empty-state">Loading...</div>
+        <div id="appList">
+            <div class="empty-state">Loading store data...</div>
         </div>
     </div>
 
@@ -102,64 +75,51 @@
     window.onload = loadApps; 
 
     async function loadApps() {
-        const appsListDiv = document.getElementById('appsList');
-        const gamesListDiv = document.getElementById('gamesList');
-        
-        appsListDiv.innerHTML = '<div class="empty-state">Loading...</div>';
-        gamesListDiv.innerHTML = '<div class="empty-state">Loading...</div>';
+        const listDiv = document.getElementById('appList');
+        listDiv.innerHTML = '<div class="empty-state">Loading...</div>';
 
         try {
             const res = await fetch(API_URL, {
                 method: 'POST',
+                // FIX: Added Content-Type header
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: "list_apps" })
             });
 
-            if (!res.ok) throw new Error("Server Error");
+            if (!res.ok) {
+                const errText = await res.text();
+                throw new Error(errText || "Server Error");
+            }
 
-            const items = await res.json();
+            const apps = await res.json();
+            listDiv.innerHTML = ""; 
+
+            if (apps.error) throw new Error(apps.error);
             
-            // Clear lists
-            appsListDiv.innerHTML = "";
-            gamesListDiv.innerHTML = "";
-
-            if (!Array.isArray(items) || items.length === 0) {
-                appsListDiv.innerHTML = '<div class="empty-state">No apps found.</div>';
-                gamesListDiv.innerHTML = '<div class="empty-state">No games found.</div>';
+            if (!Array.isArray(apps) || apps.length === 0) {
+                listDiv.innerHTML = '<div class="empty-state">No apps found. Upload one above!</div>';
                 return;
             }
 
-            // FILTER: Separate Apps from Games
-            const apps = items.filter(item => item.isGame === false);
-            const games = items.filter(item => item.isGame === true);
-
-            // RENDER APPS
-            if (apps.length === 0) appsListDiv.innerHTML = '<div class="empty-state">No apps yet.</div>';
-            else apps.reverse().forEach(app => appsListDiv.appendChild(createItemCard(app)));
-
-            // RENDER GAMES
-            if (games.length === 0) gamesListDiv.innerHTML = '<div class="empty-state">No games yet.</div>';
-            else games.reverse().forEach(game => gamesListDiv.appendChild(createItemCard(game)));
+            apps.reverse().forEach(app => {
+                const item = document.createElement('div');
+                item.className = 'app-item';
+                item.innerHTML = `
+                    <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${app.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
+                    <div class="app-info">
+                        <div class="app-name">${app.name}</div>
+                        <div class="app-meta">${app.version} • ${app.size} • ${app.isGame ? '🎮 Game' : '📱 App'}</div>
+                        <div class="app-meta" style="color:#555; font-size:10px;">${app.bundleId}</div>
+                    </div>
+                    <button onclick="deleteApp('${app.bundleId}', '${app.name}')" class="delete-btn">Delete</button>
+                `;
+                listDiv.appendChild(item);
+            });
 
         } catch (err) {
             console.error(err);
-            appsListDiv.innerHTML = `<div class="empty-state" style="color:red">Error loading data</div>`;
-            gamesListDiv.innerHTML = "";
+            listDiv.innerHTML = `<div class="empty-state" style="color:#ff3b30">Error: ${err.message}</div>`;
         }
-    }
-
-    function createItemCard(item) {
-        const div = document.createElement('div');
-        div.className = 'app-item';
-        div.innerHTML = `
-            <img src="https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${item.iconKey}" class="app-icon" onerror="this.src='https://via.placeholder.com/50'">
-            <div class="app-info">
-                <div class="app-name">${item.name}</div>
-                <div class="app-meta">${item.version} • ${item.size}</div>
-                <div class="app-meta" style="color:#555; font-size:10px;">${item.bundleId}</div>
-            </div>
-            <button onclick="deleteApp('${item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
-        `;
-        return div;
     }
 
     async function deleteApp(bundleId, name) {
@@ -168,6 +128,7 @@
         try {
             const res = await fetch(API_URL, {
                 method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: "delete_app", bundleId: bundleId })
             });
 
@@ -181,7 +142,6 @@
         }
     }
 
-    // --- AUTO-FILL & UPLOAD LOGIC ---
     function autoGenerateId() {
         const name = document.getElementById('name').value;
         const cleanName = name.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -214,12 +174,16 @@
                 version: document.getElementById('version').value || "1.0",
                 size: document.getElementById('size').value,
                 desc: document.getElementById('desc').value,
-                isGame: document.getElementById('isGame').value === 'true', // Correctly saves True/False
+                isGame: document.getElementById('isGame').value === 'true',
                 iconKey: iconKey,
                 ipaKey: ipaKey
             };
 
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(data) });
+            const res = await fetch(API_URL, { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data) 
+            });
 
             if (res.ok) {
                 btn.innerText = "✅ Done!";
@@ -238,6 +202,7 @@
     async function uploadFile(file, folder, barId) {
         const res = await fetch(API_URL, {
             method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type })
         });
         const { uploadUrl, key } = await res.json();
