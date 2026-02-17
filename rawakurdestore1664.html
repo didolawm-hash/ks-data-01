@@ -6,7 +6,6 @@
     <title>KurdeStore Pro Admin</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <style>
-        /* [Keep your existing CSS exactly as is] */
         body { background-color: #0f0f0f; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 25px; }
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
@@ -26,6 +25,7 @@
         .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #000; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
+        .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; } /* Style for subtitle */
         .app-meta { font-size: 12px; color: #777; }
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
     </style>
@@ -41,16 +41,16 @@
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
-        <span class="label">Step 2: IPA File (Auto-scanning Bundle & Version)</span>
+        <span class="label">Step 2: IPA File (Auto-scanning)</span>
         <input type="file" id="ipaFile" accept=".ipa" onchange="handleIpaSelection()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
-        <span class="label">Details</span>
-        <input type="text" id="name" placeholder="App Name">
-        <input type="text" id="bundleId" placeholder="Bundle ID (Reading IPA...)">
+        <span class="label">Step 3: Details</span>
+        <input type="text" id="name" placeholder="App Name (e.g. Video Star)">
+        <input type="text" id="subtitle" placeholder="Subtitle (e.g. Pro - Editor)"> <input type="text" id="bundleId" placeholder="Bundle ID (Auto-filled)">
         
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="version" placeholder="Version (Reading IPA...)">
+            <input type="text" id="version" placeholder="Version">
             <input type="text" id="size" placeholder="Size" readonly>
         </div>
 
@@ -80,95 +80,86 @@
 
     // --- 1. SMART IPA SCANNER ---
     async function handleIpaSelection() {
-    const file = document.getElementById('ipaFile').files[0];
-    if (!file) return;
+        const file = document.getElementById('ipaFile').files[0];
+        if (!file) return;
 
-    // Fill Size immediately
-    document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-    updateStatus("Reading IPA structure...");
+        document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+        updateStatus("Reading IPA structure...");
 
-    try {
-        const zip = await JSZip.loadAsync(file);
-        // Look for the main Info.plist
-        const plistFile = Object.keys(zip.files).find(path => 
-            path.endsWith("Info.plist") && path.includes(".app/")
-        );
-        
-        if (plistFile) {
-            updateStatus("Found Info.plist. Decoding metadata...");
-            const content = await zip.files[plistFile].async("string");
+        try {
+            const zip = await JSZip.loadAsync(file);
+            const plistFile = Object.keys(zip.files).find(path => 
+                path.endsWith("Info.plist") && path.includes(".app/")
+            );
             
-            // 1. Try to find Bundle ID
-            let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || 
-                         content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
-            
-            // 2. Try to find Version
-            let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) ||
-                         content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
+            if (plistFile) {
+                updateStatus("Found Info.plist. Decoding metadata...");
+                const content = await zip.files[plistFile].async("string");
+                
+                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/) || 
+                             content.match(/CFBundleIdentifier.*?([\w\d\.-]+)/);
+                
+                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/) ||
+                             content.match(/CFBundleShortVersionString.*?([\d\.]+)/);
 
-            if (bMatch) {
-                document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
-            }
-            if (vMatch) {
-                document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
-            }
+                if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
+                if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
 
-            if (bMatch || vMatch) {
-                updateStatus("✅ IPA Metadata Loaded Successfully");
+                if (bMatch || vMatch) {
+                    updateStatus("✅ IPA Metadata Loaded Successfully");
+                } else {
+                    updateStatus("⚠️ Plist format complex. Please check fields.");
+                }
             } else {
-                updateStatus("⚠️ Plist found but format is binary. Please enter manually.");
+                updateStatus("⚠️ No Info.plist found.");
             }
-        } else {
-            updateStatus("⚠️ No Info.plist found in this IPA.");
+        } catch (err) {
+            console.error(err);
+            updateStatus("⚠️ Error reading IPA.", true);
         }
-    } catch (err) {
-        console.error("IPA Error:", err);
-        updateStatus("⚠️ Error reading IPA file.", true);
     }
-}
 
-    // --- 2. THE UPLOAD LOGIC (With Auto-Correction) ---
+    // --- 2. THE UPLOAD LOGIC ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const name = document.getElementById('name').value;
+        const subtitle = document.getElementById('subtitle').value; // Get Subtitle
         let bId = document.getElementById('bundleId').value;
         let vers = document.getElementById('version').value;
 
-        // EMERGENCY FALLBACK: If BundleID is empty, make one from the name
+        // Fallbacks
         if (!bId && name) {
             bId = "com.kurde." + name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
             document.getElementById('bundleId').value = bId;
         }
-        
-        // EMERGENCY FALLBACK: If Version is empty, use 1.0
         if (!vers) {
             vers = "1.0";
             document.getElementById('version').value = vers;
         }
 
-        // Final Check
         if(!iconFile || !ipaFile || !name || !bId) {
-            return updateStatus("❌ Error: Still missing Icon, IPA, or Name!", true);
+            return updateStatus("❌ Error: Missing Icon, IPA, or Name!", true);
         }
 
         btn.disabled = true;
-        updateStatus("Uploading... Please don't close this page.");
+        updateStatus("Uploading files to AWS...");
 
         try {
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            updateStatus("Registering in Database...");
+            updateStatus("Finalizing Database entry...");
 
             const saveRes = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({
                     action: "save_item",
                     name: name,
+                    subtitle: subtitle, // Send to Lambda
                     bundleId: bId,
-                    appId: bId, // Vital for DynamoDB
+                    appId: bId, 
                     version: vers,
                     size: document.getElementById('size').value,
                     isGame: document.getElementById('isGame').value === "true", 
@@ -178,11 +169,10 @@
             });
 
             if(saveRes.ok) {
-                updateStatus("✅ SUCCESS: App is now LIVE!");
+                updateStatus("✅ SUCCESS: App is Live!");
                 setTimeout(() => location.reload(), 2000);
             } else { 
-                const errData = await saveRes.json();
-                throw new Error(errData.error || "Database rejected the save.");
+                throw new Error("Database rejected the save.");
             }
         } catch (err) {
             updateStatus(`❌ FAILED: ${err.message}`, true);
@@ -190,7 +180,7 @@
         }
     }
 
-    // --- HELPER FUNCTIONS ---
+    // --- HELPERS ---
     async function uploadFile(file, folder, barId) {
         const bar = document.getElementById(barId);
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
@@ -201,7 +191,7 @@
             xhr.open('PUT', uploadUrl);
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.upload.onprogress = (e) => { 
-                if (e.lengthComputable) { bar.style.width = (e.loaded / e.total) * 100 + "%"; } 
+                if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%";
             };
             xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
             xhr.onerror = () => reject();
@@ -224,12 +214,23 @@
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
+            
             let iconSrc = item.icon; 
             if (!iconSrc && item.iconKey) {
                 let cleanFileName = item.iconKey.split('/').pop(); 
                 iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
             }
-            card.innerHTML = `<img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';"><div class="app-info"><div class="app-name">${item.name}</div><div class="app-meta">${item.version} • ${item.size}</div></div><button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>`;
+
+            // Displaying Subtitle in the info section
+            card.innerHTML = `
+                <img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';">
+                <div class="app-info">
+                    <div class="app-name">${item.name}</div>
+                    <div class="app-subtitle">${item.subtitle || ''}</div>
+                    <div class="app-meta">${item.version} • ${item.size}</div>
+                </div>
+                <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
+            `;
             const isGame = (item.isGame === true || item.isGame === "true");
             isGame ? gamesDiv.appendChild(card) : appsDiv.appendChild(card);
         });
@@ -254,3 +255,5 @@
         box.innerHTML = `> ${msg}`;
     }
 </script>
+</body>
+</html>
