@@ -115,13 +115,32 @@
         const appsDiv = document.getElementById('appsList');
         const gamesDiv = document.getElementById('gamesList');
         appsDiv.innerHTML = ""; gamesDiv.innerHTML = "";
+
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            let cleanFileName = (item.iconKey || "").split('/').pop(); 
-            const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
-            card.innerHTML = `<img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';"><div class="app-info"><div class="app-name">${item.name}</div><div class="app-meta">${item.version} • ${item.size}</div></div><button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>`;
-            (item.isGame === "true" || item.isGame === true) ? gamesDiv.appendChild(card) : appsDiv.appendChild(card);
+
+            // --- SMART ICON LOGIC ---
+            // 1. Try to use the full 'icon' URL if it exists
+            // 2. If not, fallback to building it from iconKey
+            let iconSrc = item.icon; 
+            if (!iconSrc && item.iconKey) {
+                let cleanFileName = item.iconKey.split('/').pop(); 
+                iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
+            }
+            
+            card.innerHTML = `
+                <img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';">
+                <div class="app-info">
+                    <div class="app-name">${item.name}</div>
+                    <div class="app-meta">${item.version} • ${item.size}</div>
+                </div>
+                <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
+            `;
+
+            // Sort logic - handling both old strings and new booleans
+            const isGame = (item.isGame === true || item.isGame === "true");
+            isGame ? gamesDiv.appendChild(card) : appsDiv.appendChild(card);
         });
     }
 
@@ -135,19 +154,17 @@
         }
 
         btn.disabled = true;
-        updateStatus("Initializing connection to AWS...");
+        updateStatus("Starting upload process...");
 
         try {
-            // Step 1: Upload Icon
-            updateStatus("Uploading App Icon...");
+            updateStatus("Step 1: Uploading Icon...");
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             
-            // Step 2: Upload IPA
-            updateStatus("Uploading IPA File (this may take a minute)...");
+            updateStatus("Step 2: Uploading IPA (Please wait)...");
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            // Step 3: Database Save
-            updateStatus("Registering app in Database...");
+            updateStatus("Step 3: Saving to Store Database...");
+            // IMPORTANT: We send isGame as a boolean here
             const saveRes = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({
@@ -156,17 +173,16 @@
                     bundleId: document.getElementById('bundleId').value,
                     version: document.getElementById('version').value,
                     size: document.getElementById('size').value,
-                    isGame: document.getElementById('isGame').value,
-                    iconKey: iconKey, ipaKey: ipaKey
+                    isGame: document.getElementById('isGame').value === "true", // Convert to real boolean
+                    iconKey: iconKey, 
+                    ipaKey: ipaKey
                 })
             });
 
             if(saveRes.ok) {
-                updateStatus("✅ SUCCESS: App added to KurdeStore!");
-                setTimeout(() => location.reload(), 2000);
-            } else {
-                throw new Error("Database rejection");
-            }
+                updateStatus("✅ SUCCESS: Added to KurdeStore!");
+                setTimeout(() => location.reload(), 1500);
+            } else { throw new Error("Database error"); }
         } catch (err) {
             updateStatus(`❌ FAILED: ${err.message}`, true);
             btn.disabled = false;
@@ -181,7 +197,6 @@
         });
         const { uploadUrl, key } = await res.json();
         
-        // This uses XHR for real progress tracking
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', uploadUrl);
