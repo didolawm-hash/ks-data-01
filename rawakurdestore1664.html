@@ -10,9 +10,11 @@
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
         
+        /* Status Monitor */
+        #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #000; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #30d158; }
+        
         .search-container { margin-bottom: 20px; }
         .search-input { width: 100%; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; outline: none; box-sizing: border-box; }
-        .search-input:focus { border-color: #0a84ff; }
 
         input, select { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; }
         .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
@@ -21,19 +23,17 @@
         .primary-btn:hover { background: #0070e0; }
         .primary-btn:disabled { background: #444; cursor: not-allowed; }
 
-        h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
+        /* Progress Animation */
+        .bar-container { width: 100%; height: 6px; background: #333; border-radius: 10px; margin: 5px 0 15px 0; overflow: hidden; }
+        .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
         
+        h3 { font-size: 14px; color: #555; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; margin-top: 30px; }
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
         .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #000; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
-        .app-meta { font-size: 12px; color: #777; margin-top: 3px; }
-
+        .app-meta { font-size: 12px; color: #777; }
         .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
-        .delete-btn:hover { background: #ff3b30; color: white; }
-
-        .bar-container { width: 100%; height: 4px; background: #333; border-radius: 2px; margin-top: 5px; overflow: hidden; }
-        .bar { height: 100%; background: #30d158; width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
@@ -42,21 +42,23 @@
     <div class="box">
         <h2>🚀 Upload App</h2>
         
-        <span class="label">Step 1: Icon</span>
+        <div id="status-box">Ready to upload...</div>
+
+        <span class="label">Icon</span>
         <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
-        <span class="label">Step 2: IPA File</span>
+        <span class="label">IPA File</span>
         <input type="file" id="ipaFile" accept=".ipa" onchange="autoFillSize()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
-        <span class="label">Step 3: App Details</span>
-        <input type="text" id="name" placeholder="App Name (e.g., Video Star)" oninput="autoGenerateId()">
-        <input type="text" id="bundleId" placeholder="Bundle ID (com.kurdestore.app)">
+        <span class="label">Details</span>
+        <input type="text" id="name" placeholder="App Name" oninput="autoGenerateId()">
+        <input type="text" id="bundleId" placeholder="Bundle ID">
         
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version" value="1.0">
-            <input type="text" id="size" placeholder="Size (e.g., 50 MB)" readonly>
+            <input type="text" id="size" placeholder="Size" readonly>
         </div>
 
         <select id="isGame">
@@ -69,13 +71,9 @@
 
     <div class="box">
         <h2>📦 Manage Store</h2>
-        <div class="search-container">
-            <input type="text" id="searchInput" class="search-input" placeholder="Search apps or games..." oninput="filterList()">
-        </div>
-
+        <input type="text" id="searchInput" class="search-input" placeholder="Search..." oninput="filterList()">
         <h3>📱 Applications</h3>
         <div id="appsList"></div>
-
         <h3>🎮 Games</h3>
         <div id="gamesList"></div>
     </div>
@@ -87,100 +85,70 @@
 
     window.onload = loadApps;
 
-    // --- AUTO-FILL FUNCTIONS (THE ONES YOU MISSED!) ---
+    function updateStatus(msg, isError = false) {
+        const box = document.getElementById('status-box');
+        box.style.display = 'block';
+        box.style.color = isError ? '#ff3b30' : '#30d158';
+        box.style.borderLeftColor = isError ? '#ff3b30' : '#0a84ff';
+        box.innerHTML = `> ${msg}`;
+    }
+
     function autoGenerateId() {
-        const nameValue = document.getElementById('name').value;
-        // Removes spaces/special chars and makes lowercase
-        const cleanName = nameValue.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-        if (cleanName) {
-            document.getElementById('bundleId').value = "com.kurdestore." + cleanName;
-        }
+        const cleanName = document.getElementById('name').value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        if (cleanName) document.getElementById('bundleId').value = "com.kurdestore." + cleanName;
     }
 
     function autoFillSize() {
         const file = document.getElementById('ipaFile').files[0];
-        if (file) {
-            // Converts bytes to MB
-            const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-            document.getElementById('size').value = sizeInMB + " MB";
-        }
+        if (file) document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
     }
 
-    // --- LOAD & RENDER ---
     async function loadApps() {
         try {
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
             allData = await res.json();
             renderLists(allData);
-        } catch (err) {
-            console.error("Load error:", err);
-        }
+        } catch (err) { console.error(err); }
     }
 
     function renderLists(items) {
         const appsDiv = document.getElementById('appsList');
         const gamesDiv = document.getElementById('gamesList');
         appsDiv.innerHTML = ""; gamesDiv.innerHTML = "";
-
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            
-            // Icon Fix: Extract filename and build clean S3 URL
-            let rawKey = item.iconKey || "";
-            let cleanFileName = rawKey.split('/').pop(); 
+            let cleanFileName = (item.iconKey || "").split('/').pop(); 
             const iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/icons/${cleanFileName}`;
-            
-            card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" 
-                     onerror="this.onerror=null; this.src='https://via.placeholder.com/55?text=Icon';">
-                <div class="app-info">
-                    <div class="app-name">${item.name}</div>
-                    <div class="app-meta">${item.version} • ${item.size}</div>
-                    <div class="app-meta" style="color:#444; font-size: 10px;">${item.appId}</div>
-                </div>
-                <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
-            `;
-
-            if (item.isGame === "true" || item.isGame === true) {
-                gamesDiv.appendChild(card);
-            } else {
-                appsDiv.appendChild(card);
-            }
+            card.innerHTML = `<img src="${iconSrc}" class="app-icon" onerror="this.onerror=null;this.src='https://via.placeholder.com/55?text=Icon';"><div class="app-info"><div class="app-name">${item.name}</div><div class="app-meta">${item.version} • ${item.size}</div></div><button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>`;
+            (item.isGame === "true" || item.isGame === true) ? gamesDiv.appendChild(card) : appsDiv.appendChild(card);
         });
     }
 
-    // --- SEARCH & DELETE ---
-    function filterList() {
-        const query = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => i.name.toLowerCase().includes(query)));
-    }
-
-    async function deleteApp(id, name) {
-        if (!confirm(`Are you sure you want to delete ${name}?`)) return;
-        try {
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
-            loadApps();
-        } catch (e) { alert("Delete failed"); }
-    }
-
-    // --- UPLOAD CORE ---
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
 
         if(!iconFile || !ipaFile || !document.getElementById('name').value) {
-            return alert("Error: Please select both files and enter an app name.");
+            return updateStatus("Error: Missing files or name!", true);
         }
 
-        btn.disabled = true; btn.innerText = "⏳ Uploading to AWS...";
+        btn.disabled = true;
+        updateStatus("Initializing connection to AWS...");
 
         try {
+            // Step 1: Upload Icon
+            updateStatus("Uploading App Icon...");
             const iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+            
+            // Step 2: Upload IPA
+            updateStatus("Uploading IPA File (this may take a minute)...");
             const ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
 
-            await fetch(API_URL, {
+            // Step 3: Database Save
+            updateStatus("Registering app in Database...");
+            const saveRes = await fetch(API_URL, {
                 method: 'POST',
                 body: JSON.stringify({
                     action: "save_item",
@@ -189,35 +157,56 @@
                     version: document.getElementById('version').value,
                     size: document.getElementById('size').value,
                     isGame: document.getElementById('isGame').value,
-                    iconKey: iconKey,
-                    ipaKey: ipaKey
+                    iconKey: iconKey, ipaKey: ipaKey
                 })
             });
-            
-            btn.innerText = "✅ Success!";
-            setTimeout(() => location.reload(), 1000);
+
+            if(saveRes.ok) {
+                updateStatus("✅ SUCCESS: App added to KurdeStore!");
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                throw new Error("Database rejection");
+            }
         } catch (err) {
-            alert("Upload failed! Check browser console for errors.");
+            updateStatus(`❌ FAILED: ${err.message}`, true);
             btn.disabled = false;
-            btn.innerText = "Upload to Store";
         }
     }
 
     async function uploadFile(file, folder, barId) {
+        const bar = document.getElementById(barId);
         const res = await fetch(API_URL, {
             method: 'POST',
             body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type })
         });
         const { uploadUrl, key } = await res.json();
         
-        await fetch(uploadUrl, { 
-            method: 'PUT', 
-            body: file, 
-            headers: { 'Content-Type': file.type } 
+        // This uses XHR for real progress tracking
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', uploadUrl);
+            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total) * 100;
+                    bar.style.width = percent + "%";
+                }
+            };
+            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
+            xhr.onerror = () => reject();
+            xhr.send(file);
         });
-        
-        document.getElementById(barId).style.width = "100%";
-        return key;
+    }
+
+    async function deleteApp(id, name) {
+        if (!confirm(`Delete ${name}?`)) return;
+        await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
+        loadApps();
+    }
+
+    function filterList() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        renderLists(allData.filter(i => i.name.toLowerCase().includes(query)));
     }
 </script>
 </body>
