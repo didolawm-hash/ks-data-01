@@ -11,20 +11,29 @@
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
         #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #000; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #30d158; }
+        
         input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; font-family: inherit; }
+        textarea { height: 80px; resize: vertical; }
+        
         .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
         .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
+        .primary-btn:hover { background: #0070e0; }
         .cancel-btn { background: #333; margin-top: 10px; display: none; }
+        .cancel-btn:hover { background: #444; }
+        
         .bar-container { width: 100%; height: 6px; background: #333; border-radius: 10px; margin: 5px 0 15px 0; overflow: hidden; }
-        .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; }
+        .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
+        
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
         .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
-        .app-subtitle { font-size: 13px; color: #0a84ff; }
+        .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; }
+        .app-meta { font-size: 12px; color: #777; }
+        
         .btn-group { display: flex; gap: 8px; }
-        .edit-btn { background: #0a84ff20; color: #0a84ff; border: 1px solid #0a84ff40; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
-        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        .edit-btn { background: #0a84ff20; color: #0a84ff; border: 1px solid #0a84ff40; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -46,8 +55,8 @@
 
         <span class="label">Metadata</span>
         <input type="text" id="name" placeholder="Display Name">
-        <input type="text" id="info" placeholder="Subtitle">
-        <textarea id="desc" placeholder="Full Description"></textarea>
+        <input type="text" id="info" placeholder="Subtitle"> 
+        <textarea id="desc" placeholder="Full Description / Features"></textarea>
         
         <span class="label">System Info</span>
         <input type="text" id="bundleId" placeholder="Bundle ID">
@@ -67,14 +76,19 @@
 
     <div class="box">
         <h2>📦 Manage Store</h2>
-        <input type="text" id="searchInput" placeholder="Search..." oninput="filterList()">
+        <input type="text" id="searchInput" style="width:100%; margin-bottom:20px;" placeholder="Search..." oninput="filterList()">
         <div id="appsList"></div>
         <div id="gamesList"></div>
     </div>
 </div>
 
 <script>
+    // ✅ HTTPS LINK (SECURE)
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
+    
+    // ✅ BASE URL FOR S3 (For constructing Store Links)
+    const S3_BASE_URL = "https://kurde-store-data.s3.eu-west-2.amazonaws.com/";
+
     let allData = [];
     let isEditing = false;
 
@@ -91,76 +105,87 @@
                 const content = await zip.files[plistFile].async("string");
                 let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
                 let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
+                
+                // Only auto-fill if we are NOT editing (prevents overwriting custom data)
                 if (!isEditing) {
                     if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
                     if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
                 }
+                updateStatus("✅ Metadata Scanned");
             }
-        } catch (e) { updateStatus("⚠️ Meta Error", true); }
+        } catch (e) { updateStatus("⚠️ Scan Error", true); }
     }
 
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
-        const bId = document.getElementById('bundleId').value;
         const name = document.getElementById('name').value;
+        const bId = document.getElementById('bundleId').value;
 
-        if (!bId || !name) return updateStatus("❌ Name/ID Missing", true);
+        if(!name || !bId) return updateStatus("❌ Name and BundleID required", true);
         
-        // If not editing, both files are mandatory. If editing, they are optional.
-        if (!isEditing && (!iconFile || !ipaFile)) {
-            return updateStatus("❌ Icon and IPA are required for new apps", true);
-        }
+        // Validation: New apps need files. Updates don't (optional).
+        if(!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need both Icon and IPA", true);
 
         btn.disabled = true;
-        updateStatus(isEditing ? "Updating App..." : "Uploading New App...");
+        updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
-            // Logic: Use new file if selected, otherwise keep the original key
+            // Get keys from hidden inputs (preserves old files if not uploading new ones)
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
 
+            // Upload NEW files if selected
             if (iconFile) {
-                updateStatus("Uploading new icon...");
+                updateStatus("Uploading Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             }
-            
             if (ipaFile) {
-                updateStatus("Uploading new IPA...");
+                updateStatus("Uploading IPA...");
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
             }
 
+            // ✅ CRITICAL FIX: Construct FULL URLs for the Public Store
+            const fullIconUrl = iconKey ? (S3_BASE_URL + iconKey) : "";
+            const fullIpaUrl = ipaKey ? (S3_BASE_URL + ipaKey) : "";
+
             const payload = {
                 action: "save_item",
-                bundleId: bId,
                 name: name,
                 info: document.getElementById('info').value,
                 desc: document.getElementById('desc').value,
+                bundleId: bId,
+                appId: bId,
                 version: document.getElementById('version').value,
                 size: document.getElementById('size').value,
                 isGame: document.getElementById('isGame').value === "true",
+                
+                // Save Keys (For Admin/Deletion)
                 iconKey: iconKey,
-                ipaKey: ipaKey
+                ipaKey: ipaKey,
+                
+                // Save Full URLs (For Public Store Compatibility)
+                icon: fullIconUrl,
+                ipa: fullIpaUrl
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            updateStatus("✅ Store Synchronized!");
+
+            updateStatus("✅ Success! Store Updated.");
             setTimeout(() => location.reload(), 1500);
-        } catch (err) { 
-            updateStatus("❌ Error: " + err.message, true); 
-            btn.disabled = false; 
-        }
+        } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
     }
 
     async function uploadFile(file, folder, barId) {
+        const bar = document.getElementById(barId);
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
         const { uploadUrl, key } = await res.json();
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', uploadUrl);
             xhr.setRequestHeader('Content-Type', file.type);
-            xhr.upload.onprogress = (e) => { if (e.lengthComputable) document.getElementById(barId).style.width = (e.loaded/e.total)*100+"%"; };
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
             xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
             xhr.send(file);
         });
@@ -168,26 +193,44 @@
 
     async function loadApps() {
         try {
+            updateStatus("Loading apps...");
             const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
+            if (!res.ok) throw new Error("Connection Failed");
             allData = await res.json();
             renderLists(allData);
-        } catch (e) { updateStatus("❌ Load Failed", true); }
+            updateStatus("Ready");
+        } catch (e) { 
+            console.error(e);
+            updateStatus("❌ Load Failed: " + e.message, true); 
+        }
     }
 
     function renderLists(items) {
         const aList = document.getElementById('appsList');
         const gList = document.getElementById('gamesList');
-        aList.innerHTML = "<h3>📱 Apps</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
+        aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
+        
+        if (!items || items.length === 0) {
+            aList.innerHTML += "<p>No apps found.</p>";
+            return;
+        }
+
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            let iconSrc = item.iconKey ? `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}` : (item.icon || "");
+            
+            // Prioritize the 'iconKey' for Admin Panel display
+            let iconSrc = item.iconKey ? (S3_BASE_URL + item.iconKey) : (item.icon || "https://via.placeholder.com/55");
+            
+            // Encode data for the Edit button
             const itemString = encodeURIComponent(JSON.stringify(item));
+
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
-                    <div class="app-subtitle">${item.info || ''}</div>
+                    <div class="app-subtitle">${item.info || ''}</div> 
+                    <div class="app-meta">${item.version} • ${item.size || 'Unknown'}</div>
                 </div>
                 <div class="btn-group">
                     <button onclick="editApp('${itemString}')" class="edit-btn">Edit</button>
@@ -202,14 +245,12 @@
         const item = JSON.parse(decodeURIComponent(encodedItem));
         isEditing = true;
         
-        // UI Cleanup
-        document.getElementById('formTitle').innerText = "🔄 Updating: " + item.name;
+        // Switch UI to Edit Mode
+        document.getElementById('formTitle').innerText = "🔄 Update: " + item.name;
         document.getElementById('btn').innerText = "Update App";
-        document.getElementById('cancelBtn').style.display = "block";
-        document.getElementById('status-box').style.display = "block";
-        document.getElementById('status-box').innerHTML = "> Mode: Edit. Leave files blank to keep existing ones.";
-
-        // Populate Fields
+        document.getElementById('cancelBtn').style.display = "inline-block";
+        
+        // Fill Form
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
@@ -218,11 +259,15 @@
         document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
         
-        // Save current keys to hidden fields
+        // Store existing keys so we don't lose them
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
-        
+
+        // Lock Bundle ID to prevent duplicates
         document.getElementById('bundleId').readOnly = true;
+        document.getElementById('bundleId').style.opacity = "0.6";
+        
+        updateStatus("⚠️ Edit Mode: Upload new files only if you want to replace them.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -231,21 +276,21 @@
     }
 
     async function deleteApp(id, name) {
-        if (confirm(`Delete ${name}?\nThis will remove files from S3 too.`)) {
+        if (confirm(`Delete ${name}?\nThis will remove it from the store AND delete files from S3.`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
+    }
+
+    function filterList() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        renderLists(allData.filter(i => (i.name || "").toLowerCase().includes(q)));
     }
 
     function updateStatus(m, e=false) {
         const b = document.getElementById('status-box');
         b.style.display = 'block'; b.style.color = e ? '#ff3b30' : '#30d158';
         b.innerHTML = "> " + m;
-    }
-
-    function filterList() {
-        const q = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => (i.name || "").toLowerCase().includes(q)));
     }
 </script>
 </body>
