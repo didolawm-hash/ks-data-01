@@ -47,8 +47,10 @@
         <input type="hidden" id="originalIconKey">
 
         <span class="label">Files</span>
-        <input type="file" id="iconFile" accept="image/*">
-        <div class="bar-container"><div class="bar" id="iconBar"></div></div>
+        <div id="iconInputContainer">
+            <input type="file" id="iconFile" accept="image/*" placeholder="Icon (Optional on Update)">
+            <div class="bar-container"><div class="bar" id="iconBar"></div></div>
+        </div>
         
         <input type="file" id="ipaFile" accept=".ipa" onchange="handleIpaSelection()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
@@ -86,7 +88,7 @@
     // ✅ HTTPS LINK (SECURE)
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
     
-    // ✅ BASE URL FOR S3 (For constructing Store Links)
+    // ✅ BASE URL FOR S3
     const S3_BASE_URL = "https://kurde-store-data.s3.eu-west-2.amazonaws.com/";
 
     let allData = [];
@@ -106,7 +108,7 @@
                 let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
                 let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
                 
-                // Only auto-fill if we are NOT editing (prevents overwriting custom data)
+                // Only auto-fill if we are NOT editing
                 if (!isEditing) {
                     if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
                     if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
@@ -125,28 +127,32 @@
 
         if(!name || !bId) return updateStatus("❌ Name and BundleID required", true);
         
-        // Validation: New apps need files. Updates don't (optional).
+        // Validation: New apps need files. Updates don't.
         if(!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need both Icon and IPA", true);
 
         btn.disabled = true;
         updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
-            // Get keys from hidden inputs (preserves old files if not uploading new ones)
+            // Get existing keys (if updating)
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
 
-            // Upload NEW files if selected
+            // UPLOAD LOGIC:
+            // 1. If user selected a new icon, upload it and get new key.
             if (iconFile) {
-                updateStatus("Uploading Icon...");
+                updateStatus("Uploading New Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-            }
+            } 
+            // 2. If NO new icon selected, we simply keep 'iconKey' as it is (the old one).
+
+            // 3. If user selected a new IPA, upload it.
             if (ipaFile) {
-                updateStatus("Uploading IPA...");
+                updateStatus("Uploading New IPA...");
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
             }
 
-            // ✅ CRITICAL FIX: Construct FULL URLs for the Public Store
+            // Construct full URLs for Store Front-end
             const fullIconUrl = iconKey ? (S3_BASE_URL + iconKey) : "";
             const fullIpaUrl = ipaKey ? (S3_BASE_URL + ipaKey) : "";
 
@@ -160,19 +166,15 @@
                 version: document.getElementById('version').value,
                 size: document.getElementById('size').value,
                 isGame: document.getElementById('isGame').value === "true",
-                
-                // Save Keys (For Admin/Deletion)
                 iconKey: iconKey,
                 ipaKey: ipaKey,
-                
-                // Save Full URLs (For Public Store Compatibility)
                 icon: fullIconUrl,
                 ipa: fullIpaUrl
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
 
-            updateStatus("✅ Success! Store Updated.");
+            updateStatus("✅ Success! App Updated.");
             setTimeout(() => location.reload(), 1500);
         } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
     }
@@ -221,8 +223,6 @@
             
             // Prioritize the 'iconKey' for Admin Panel display
             let iconSrc = item.iconKey ? (S3_BASE_URL + item.iconKey) : (item.icon || "https://via.placeholder.com/55");
-            
-            // Encode data for the Edit button
             const itemString = encodeURIComponent(JSON.stringify(item));
 
             card.innerHTML = `
@@ -250,6 +250,10 @@
         document.getElementById('btn').innerText = "Update App";
         document.getElementById('cancelBtn').style.display = "inline-block";
         
+        // Hide Icon Input visually to keep UI clean for updates
+        // You can still see the file input if you really wanted to, but the label implies it's optional
+        document.getElementById('iconFile').style.opacity = "0.5"; 
+        
         // Fill Form
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
@@ -259,15 +263,15 @@
         document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
         
-        // Store existing keys so we don't lose them
+        // Store existing keys
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
 
-        // Lock Bundle ID to prevent duplicates
+        // Lock Bundle ID
         document.getElementById('bundleId').readOnly = true;
         document.getElementById('bundleId').style.opacity = "0.6";
         
-        updateStatus("⚠️ Edit Mode: Upload new files only if you want to replace them.");
+        updateStatus("⚠️ Update Mode: Just upload new IPA to update.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
