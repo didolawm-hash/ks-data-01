@@ -104,23 +104,37 @@
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const bId = document.getElementById('bundleId').value;
+        const name = document.getElementById('name').value;
 
-        if (!bId || !document.getElementById('name').value) return updateStatus("❌ Name/ID Missing", true);
+        if (!bId || !name) return updateStatus("❌ Name/ID Missing", true);
+        
+        // If not editing, both files are mandatory. If editing, they are optional.
+        if (!isEditing && (!iconFile || !ipaFile)) {
+            return updateStatus("❌ Icon and IPA are required for new apps", true);
+        }
 
         btn.disabled = true;
-        updateStatus("Uploading...");
+        updateStatus(isEditing ? "Updating App..." : "Uploading New App...");
 
         try {
+            // Logic: Use new file if selected, otherwise keep the original key
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
 
-            if (iconFile) iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-            if (ipaFile) ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+            if (iconFile) {
+                updateStatus("Uploading new icon...");
+                iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+            }
+            
+            if (ipaFile) {
+                updateStatus("Uploading new IPA...");
+                ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+            }
 
             const payload = {
                 action: "save_item",
                 bundleId: bId,
-                name: document.getElementById('name').value,
+                name: name,
                 info: document.getElementById('info').value,
                 desc: document.getElementById('desc').value,
                 version: document.getElementById('version').value,
@@ -131,9 +145,12 @@
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            updateStatus("✅ Success!");
+            updateStatus("✅ Store Synchronized!");
             setTimeout(() => location.reload(), 1500);
-        } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
+        } catch (err) { 
+            updateStatus("❌ Error: " + err.message, true); 
+            btn.disabled = false; 
+        }
     }
 
     async function uploadFile(file, folder, barId) {
@@ -184,9 +201,15 @@
     function editApp(encodedItem) {
         const item = JSON.parse(decodeURIComponent(encodedItem));
         isEditing = true;
+        
+        // UI Cleanup
         document.getElementById('formTitle').innerText = "🔄 Updating: " + item.name;
         document.getElementById('btn').innerText = "Update App";
         document.getElementById('cancelBtn').style.display = "block";
+        document.getElementById('status-box').style.display = "block";
+        document.getElementById('status-box').innerHTML = "> Mode: Edit. Leave files blank to keep existing ones.";
+
+        // Populate Fields
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
@@ -194,10 +217,13 @@
         document.getElementById('version').value = item.version;
         document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
+        
+        // Save current keys to hidden fields
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
+        
         document.getElementById('bundleId').readOnly = true;
-        window.scrollTo(0,0);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function resetForm() {
@@ -205,7 +231,7 @@
     }
 
     async function deleteApp(id, name) {
-        if (confirm(`Delete ${name}?`)) {
+        if (confirm(`Delete ${name}?\nThis will remove files from S3 too.`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
@@ -219,7 +245,7 @@
 
     function filterList() {
         const q = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => i.name.toLowerCase().includes(q)));
+        renderLists(allData.filter(i => (i.name || "").toLowerCase().includes(q)));
     }
 </script>
 </body>
