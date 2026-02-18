@@ -11,43 +11,43 @@
         .box { background: #1a1a1a; padding: 25px; border-radius: 18px; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
         h2 { margin: 0 0 20px 0; color: #0a84ff; display: flex; align-items: center; gap: 10px; font-size: 22px; }
         #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #000; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #30d158; }
-        
         input, select, textarea { width: 100%; padding: 12px; margin: 8px 0; background: #252525; border: 1px solid #333; color: white; border-radius: 10px; box-sizing: border-box; font-family: inherit; }
-        textarea { height: 80px; resize: vertical; }
-        
         .label { font-size: 11px; color: #888; font-weight: bold; text-transform: uppercase; margin-top: 10px; display: block; }
         .primary-btn { width: 100%; padding: 15px; background: #0a84ff; color: white; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin-top: 15px; transition: 0.2s; }
-        .primary-btn:hover { background: #0070e0; }
-        
+        .cancel-btn { background: #333; margin-top: 10px; display: none; }
         .bar-container { width: 100%; height: 6px; background: #333; border-radius: 10px; margin: 5px 0 15px 0; overflow: hidden; }
-        .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
-        
+        .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; }
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
         .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
-        .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; }
-        .app-meta { font-size: 12px; color: #777; }
-        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .app-subtitle { font-size: 13px; color: #0a84ff; }
+        .btn-group { display: flex; gap: 8px; }
+        .edit-btn { background: #0a84ff20; color: #0a84ff; border: 1px solid #0a84ff40; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+        .delete-btn { background: #ff3b3020; color: #ff3b30; border: 1px solid #ff3b3040; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="box">
-        <h2>🚀 Upload App</h2>
+        <h2 id="formTitle">🚀 Upload App</h2>
         <div id="status-box">Ready to sync...</div>
 
+        <input type="hidden" id="originalIpaKey">
+        <input type="hidden" id="originalIconKey">
+
         <span class="label">Files</span>
-        <input type="file" id="iconFile" accept="image/*" placeholder="Icon">
+        <input type="file" id="iconFile" accept="image/*">
         <div class="bar-container"><div class="bar" id="iconBar"></div></div>
         
         <input type="file" id="ipaFile" accept=".ipa" onchange="handleIpaSelection()">
         <div class="bar-container"><div class="bar" id="ipaBar"></div></div>
 
-        <span class="label">Metadata (Visible in Store)</span>
+        <span class="label">Metadata</span>
         <input type="text" id="name" placeholder="Display Name">
-        <input type="text" id="info" placeholder="Subtitle (Appears under Name)"> <textarea id="desc" placeholder="Full Description / Features"></textarea>
+        <input type="text" id="info" placeholder="Subtitle">
+        <textarea id="desc" placeholder="Full Description"></textarea>
         
         <span class="label">System Info</span>
         <input type="text" id="bundleId" placeholder="Bundle ID">
@@ -62,11 +62,12 @@
         </select>
 
         <button onclick="startUpload()" id="btn" class="primary-btn">Upload to Store</button>
+        <button onclick="resetForm()" id="cancelBtn" class="primary-btn cancel-btn">Cancel Update</button>
     </div>
 
     <div class="box">
         <h2>📦 Manage Store</h2>
-        <input type="text" id="searchInput" style="width:100%; padding:12px; background:#252525; border:1px solid #333; color:white; border-radius:10px; margin-bottom:20px;" placeholder="Search..." oninput="filterList()">
+        <input type="text" id="searchInput" placeholder="Search..." oninput="filterList()">
         <div id="appsList"></div>
         <div id="gamesList"></div>
     </div>
@@ -79,99 +80,146 @@
 
     window.onload = loadApps;
 
-    async function loadApps() {
-        const aList = document.getElementById('appsList');
-        updateStatus("📡 Fetching store data...");
-        
+    async function handleIpaSelection() {
+        const file = document.getElementById('ipaFile').files[0];
+        if (!file) return;
+        document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
         try {
-            const res = await fetch(API_URL, { 
-                method: 'POST', 
-                body: JSON.stringify({ action: "list_apps" }) 
-            });
-
-            if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
-
-            const data = await res.json();
-            console.log("Database Response:", data); // Check your browser console!
-
-            // Handle different AWS response formats
-            allData = Array.isArray(data) ? data : (data.Items || []);
-
-            if (allData.length === 0) {
-                updateStatus("⚠️ Database is empty.");
-                aList.innerHTML = "<p style='color: #888;'>No apps found in the store.</p>";
-            } else {
-                renderLists(allData);
-                updateStatus("✅ Sync Complete");
+            const zip = await JSZip.loadAsync(file);
+            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes(".app/"));
+            if (plistFile) {
+                const content = await zip.files[plistFile].async("string");
+                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
+                if (!isEditing) {
+                    if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
+                    if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
+                }
             }
-        } catch (e) { 
-            console.error("Load Error:", e);
-            updateStatus("❌ Load Failed: " + e.message, true); 
-            aList.innerHTML = `<p style="color: #ff3b30;">Cannot connect to database. Check Lambda logs.</p>`;
-        }
+        } catch (e) { updateStatus("⚠️ Meta Error", true); }
+    }
+
+    async function startUpload() {
+        const btn = document.getElementById('btn');
+        const iconFile = document.getElementById('iconFile').files[0];
+        const ipaFile = document.getElementById('ipaFile').files[0];
+        const bId = document.getElementById('bundleId').value;
+
+        if (!bId || !document.getElementById('name').value) return updateStatus("❌ Name/ID Missing", true);
+
+        btn.disabled = true;
+        updateStatus("Uploading...");
+
+        try {
+            let iconKey = document.getElementById('originalIconKey').value;
+            let ipaKey = document.getElementById('originalIpaKey').value;
+
+            if (iconFile) iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
+            if (ipaFile) ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+
+            const payload = {
+                action: "save_item",
+                bundleId: bId,
+                name: document.getElementById('name').value,
+                info: document.getElementById('info').value,
+                desc: document.getElementById('desc').value,
+                version: document.getElementById('version').value,
+                size: document.getElementById('size').value,
+                isGame: document.getElementById('isGame').value === "true",
+                iconKey: iconKey,
+                ipaKey: ipaKey
+            };
+
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            updateStatus("✅ Success!");
+            setTimeout(() => location.reload(), 1500);
+        } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
+    }
+
+    async function uploadFile(file, folder, barId) {
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
+        const { uploadUrl, key } = await res.json();
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', uploadUrl);
+            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.upload.onprogress = (e) => { if (e.lengthComputable) document.getElementById(barId).style.width = (e.loaded/e.total)*100+"%"; };
+            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
+            xhr.send(file);
+        });
+    }
+
+    async function loadApps() {
+        try {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
+            allData = await res.json();
+            renderLists(allData);
+        } catch (e) { updateStatus("❌ Load Failed", true); }
     }
 
     function renderLists(items) {
         const aList = document.getElementById('appsList');
         const gList = document.getElementById('gamesList');
-        aList.innerHTML = "<h3>📱 Applications</h3>"; 
-        gList.innerHTML = "<h3>🎮 Games</h3>";
-        
+        aList.innerHTML = "<h3>📱 Apps</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            
-            // Support for both OLD and NEW icon storage
-            let iconSrc = item.icon || item.iconUrl || "https://via.placeholder.com/55";
-            if (item.iconKey) {
-                iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
-            }
-            
-            // Ensure we have a valid ID for deletion/editing
-            const id = item.appId || item.bundleId || "unknown";
+            let iconSrc = item.iconKey ? `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}` : (item.icon || "");
             const itemString = encodeURIComponent(JSON.stringify(item));
-
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
                 <div class="app-info">
-                    <div class="app-name">${item.name || "Untitled"}</div>
-                    <div class="app-subtitle">${item.info || ''}</div> 
-                    <div class="app-meta">${item.version || '1.0'} • ${item.size || ''}</div>
+                    <div class="app-name">${item.name}</div>
+                    <div class="app-subtitle">${item.info || ''}</div>
                 </div>
                 <div class="btn-group">
                     <button onclick="editApp('${itemString}')" class="edit-btn">Edit</button>
-                    <button onclick="deleteApp('${id}', '${item.name || 'App'}')" class="delete-btn">Delete</button>
+                    <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
                 </div>
             `;
-            
-            // Check if it's a game (handles boolean or string "true")
-            const isGame = String(item.isGame) === "true";
-            isGame ? gList.appendChild(card) : aList.appendChild(card);
+            (String(item.isGame) === "true") ? gList.appendChild(card) : aList.appendChild(card);
         });
     }
 
-    // --- Keep your existing handleIpaSelection, uploadFile, startUpload, editApp, resetForm, updateStatus, and filterList functions exactly as they were ---
-    
-    // [Make sure to keep the rest of your helper functions here...]
-    async function handleIpaSelection() { /* existing code */ }
-    async function startUpload() { /* existing code */ }
-    async function uploadFile() { /* existing code */ }
-    function editApp(encodedItem) { /* existing code */ }
-    function resetForm() { /* existing code */ }
+    function editApp(encodedItem) {
+        const item = JSON.parse(decodeURIComponent(encodedItem));
+        isEditing = true;
+        document.getElementById('formTitle').innerText = "🔄 Updating: " + item.name;
+        document.getElementById('btn').innerText = "Update App";
+        document.getElementById('cancelBtn').style.display = "block";
+        document.getElementById('name').value = item.name;
+        document.getElementById('info').value = item.info || "";
+        document.getElementById('desc').value = item.desc || "";
+        document.getElementById('bundleId').value = item.bundleId || item.appId;
+        document.getElementById('version').value = item.version;
+        document.getElementById('size').value = item.size;
+        document.getElementById('isGame').value = String(item.isGame);
+        document.getElementById('originalIconKey').value = item.iconKey || "";
+        document.getElementById('originalIpaKey').value = item.ipaKey || "";
+        document.getElementById('bundleId').readOnly = true;
+        window.scrollTo(0,0);
+    }
+
+    function resetForm() {
+        location.reload();
+    }
+
     async function deleteApp(id, name) {
         if (confirm(`Delete ${name}?`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
     }
+
     function updateStatus(m, e=false) {
         const b = document.getElementById('status-box');
         b.style.display = 'block'; b.style.color = e ? '#ff3b30' : '#30d158';
         b.innerHTML = "> " + m;
     }
+
     function filterList() {
         const q = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => (i.name || "").toLowerCase().includes(q)));
+        renderLists(allData.filter(i => i.name.toLowerCase().includes(q)));
     }
 </script>
 </body>
