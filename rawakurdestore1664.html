@@ -73,13 +73,14 @@
 </div>
 
 <script>
+    // MAKE SURE THIS URL IS CORRECT
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
     let allData = [];
     let isEditing = false;
 
     window.onload = loadApps;
 
-    // ... handleIpaSelection function (keep as is) ...
+    // ... handleIpaSelection (keep existing) ...
     async function handleIpaSelection() {
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
@@ -91,7 +92,6 @@
                 const content = await zip.files[plistFile].async("string");
                 let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
                 let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-                // Only auto-fill if NOT editing (to prevent overwriting custom edits)
                 if (!isEditing) {
                     if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
                     if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
@@ -101,14 +101,14 @@
         } catch (e) { updateStatus("⚠️ Scan Error", true); }
     }
 
+    // ... startUpload (keep existing) ...
     async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const name = document.getElementById('name').value;
         const bId = document.getElementById('bundleId').value;
-        
-        // Validation
+
         if (!name || !bId) return updateStatus("❌ Name and BundleID required", true);
         if (!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need files", true);
 
@@ -116,7 +116,6 @@
         btn.innerText = isEditing ? "Updating..." : "Uploading...";
 
         try {
-            // 1. Upload new files ONLY if selected
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
 
@@ -129,19 +128,20 @@
                 info: document.getElementById('info').value,
                 desc: document.getElementById('desc').value,
                 bundleId: bId,
-                appId: bId, // This ensures we overwrite the existing DB entry
+                appId: bId,
                 version: document.getElementById('version').value,
                 size: document.getElementById('size').value,
                 isGame: document.getElementById('isGame').value === "true",
-                iconKey: iconKey,
-                ipaKey: ipaKey
+                iconKey: iconKey, // New system
+                ipaKey: ipaKey,   // New system
+                icon: iconKey ? `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${iconKey}` : "", // Fallback for old system
+                ipa: ipaKey ? `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${ipaKey}` : ""   // Fallback for old system
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
 
             updateStatus(isEditing ? "✅ App Updated!" : "✅ App Added!");
             setTimeout(() => location.reload(), 1500);
-
         } catch (err) { 
             updateStatus("❌ Error: " + err.message, true); 
             btn.disabled = false; 
@@ -162,16 +162,86 @@
         });
     }
 
-    // --- NEW: EDIT FUNCTION ---
+    // --- FIXED: Render Function supports OLD and NEW apps ---
+    function renderLists(items) {
+        const aList = document.getElementById('appsList');
+        const gList = document.getElementById('gamesList');
+        aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
+        
+        if (!items || items.length === 0) {
+            updateStatus("⚠️ No apps found in database.", true);
+            return;
+        }
+
+        items.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'app-item';
+            
+            // SMART ICON CHECK:
+            // 1. Try 'iconKey' (New System)
+            // 2. Try 'icon' (Old System - Full URL)
+            // 3. Use Placeholder
+            let iconSrc = "https://via.placeholder.com/55";
+            if (item.iconKey) {
+                iconSrc = `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}`;
+            } else if (item.icon && item.icon.startsWith('http')) {
+                iconSrc = item.icon;
+            } else if (item.iconUrl) { // Sometimes stored as iconUrl
+                iconSrc = item.iconUrl;
+            }
+            
+            const itemString = encodeURIComponent(JSON.stringify(item));
+
+            card.innerHTML = `
+                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
+                <div class="app-info">
+                    <div class="app-name">${item.name || "Unknown App"}</div>
+                    <div class="app-subtitle">${item.info || ''}</div> 
+                    <div class="app-meta">${item.version || '1.0'} • ${item.size || 'Unknown'}</div>
+                </div>
+                <div class="btn-group">
+                    <button onclick="editApp('${itemString}')" class="edit-btn">Edit</button>
+                    <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+                </div>
+            `;
+            (String(item.isGame) === "true") ? gList.appendChild(card) : aList.appendChild(card);
+        });
+    }
+
+    // --- FIXED: Load Function with Error Checking ---
+    async function loadApps() {
+        try {
+            updateStatus("Loading apps...");
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
+            
+            if (!res.ok) throw new Error("Lambda Error: " + res.status);
+            
+            allData = await res.json();
+            
+            // Safety check if Lambda returned an error message instead of an array
+            if (allData.error) {
+                throw new Error(allData.error);
+            }
+            if (!Array.isArray(allData)) {
+                // If it returns a single object instead of array, wrap it
+                allData = allData.Items ? allData.Items : [];
+            }
+
+            renderLists(allData);
+            updateStatus("Ready");
+        } catch (e) { 
+            console.error(e);
+            updateStatus("❌ Load Failed: " + e.message, true); 
+        }
+    }
+
+    // ... editApp, resetForm, deleteApp (keep existing) ...
     function editApp(encodedItem) {
         const item = JSON.parse(decodeURIComponent(encodedItem));
-        
         isEditing = true;
         document.getElementById('formTitle').innerText = "🔄 Update App: " + item.name;
         document.getElementById('btn').innerText = "Update App";
         document.getElementById('cancelBtn').style.display = "inline-block";
-
-        // Fill form
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
@@ -179,15 +249,10 @@
         document.getElementById('version').value = item.version;
         document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
-        
-        // Save original keys so we don't lose them if we don't upload new files
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
-
-        // Lock Bundle ID so we don't accidentally create a duplicate
         document.getElementById('bundleId').readOnly = true;
         document.getElementById('bundleId').style.opacity = "0.6";
-
         window.scrollTo({ top: 0, behavior: 'smooth' });
         updateStatus("⚠️ Editing mode: Upload new IPA to overwrite.");
     }
@@ -199,8 +264,6 @@
         document.getElementById('cancelBtn').style.display = "none";
         document.getElementById('bundleId').readOnly = false;
         document.getElementById('bundleId').style.opacity = "1";
-        
-        // Clear inputs
         ['name', 'info', 'desc', 'bundleId', 'version', 'size', 'originalIpaKey', 'originalIconKey'].forEach(id => document.getElementById(id).value = '');
         document.getElementById('iconFile').value = "";
         document.getElementById('ipaFile').value = "";
@@ -208,58 +271,19 @@
         document.getElementById('ipaBar').style.width = "0%";
     }
 
-    function renderLists(items) {
-        const aList = document.getElementById('appsList');
-        const gList = document.getElementById('gamesList');
-        aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
-        
-        items.forEach(item => {
-            const card = document.createElement('div');
-            card.className = 'app-item';
-            
-            // Handle Icon URL safely
-            let iconSrc = item.iconKey ? `https://kurde-store-data.s3.eu-west-2.amazonaws.com/${item.iconKey}` : "https://via.placeholder.com/55";
-            
-            // Encode item for the edit button
-            const itemString = encodeURIComponent(JSON.stringify(item));
-
-            card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
-                <div class="app-info">
-                    <div class="app-name">${item.name}</div>
-                    <div class="app-subtitle">${item.info || ''}</div> 
-                    <div class="app-meta">${item.version} • ${item.size || 'Unknown'}</div>
-                </div>
-                <div class="btn-group">
-                    <button onclick="editApp('${itemString}')" class="edit-btn">Edit / Update</button>
-                    <button onclick="deleteApp('${item.appId}', '${item.name}')" class="delete-btn">Delete</button>
-                </div>
-            `;
-            (String(item.isGame) === "true") ? gList.appendChild(card) : aList.appendChild(card);
-        });
-    }
-
-    // ... deleteApp and loadApps (keep as is) ...
     async function deleteApp(id, name) {
-        if (confirm(`⚠️ DELETE WARNING ⚠️\n\nThis will permanently delete:\n- ${name} from the store\n- The IPA file from S3\n- The Icon from S3\n\nAre you sure?`)) {
+        if (confirm(`Delete ${name}?`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
     }
-    
-    // ... loadApps, updateStatus, filterList (keep as is) ...
-    async function loadApps() {
-        try {
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
-            allData = await res.json();
-            renderLists(allData);
-        } catch (e) { console.error(e); }
-    }
+
     function updateStatus(m, e=false) {
         const b = document.getElementById('status-box');
         b.style.display = 'block'; b.style.color = e ? '#ff3b30' : '#30d158';
         b.innerHTML = "> " + m;
     }
+
     function filterList() {
         const q = document.getElementById('searchInput').value.toLowerCase();
         renderLists(allData.filter(i => i.name.toLowerCase().includes(q)));
