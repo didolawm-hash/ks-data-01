@@ -43,104 +43,104 @@
         const udid = urlParams.get('udid');
         const BACKEND_API = "https://api.kurde.store"; 
 
+        // --- FIXED: Direct Install Function ---
         async function startProvisioning() {
             const btn = document.getElementById('installBtn');
             const statusBox = document.getElementById('statusBox');
-            const originalHTML = statusBox.innerHTML;
             
-            btn.disabled = true;
-            btn.innerText = "Signing App...";
+            // 1. HARDCODED SETTINGS TO FIX "UNABLE TO INSTALL"
+            // We force the correct Bundle ID here so it matches your IPA exactly.
+            const bundleId = "com.example.ikurdApp"; 
+            const ipaUrl = "https://my-app-store-storage.s3.eu-west-2.amazonaws.com/apps/KurdeStore.ipa";
+            const appName = "Kurde Store";
 
+            // 2. UI Updates
+            btn.disabled = true;
+            btn.innerText = "Requesting Install...";
             statusBox.innerHTML = `
                 <div class="loader"></div>
-                <p class="progress-text">zsign is preparing your personal build...<br>This takes 10-20 seconds.</p>
+                <p class="progress-text">Preparing installation...<br>Please wait.</p>
             `;
 
-            try {
-                const response = await fetch(`${BACKEND_API}`, { 
-                    method: 'POST',
-                    mode: 'cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: "sign_app", udid: udid, appId: "KurdeStore" })
-                });
+            // 3. Construct the Link Manually
+            // We point to your Lambda's /plist endpoint and pass the correct data
+            const plistApi = "https://api.kurde.store/plist";
+            const manifestUrl = `${plistApi}?ipaUrl=${encodeURIComponent(ipaUrl)}&bundleId=${encodeURIComponent(bundleId)}&name=${encodeURIComponent(appName)}`;
+            
+            // Add a timestamp to force Safari to ignore old cached versions
+            const finalManifestUrl = `${manifestUrl}&t=${Date.now()}`;
+            const installLink = `itms-services://?action=download-manifest&url=${encodeURIComponent(finalManifestUrl)}`;
 
-                if (!response.ok) throw new Error("Server error during signing.");
-                const data = await response.json();
+            // 4. Trigger Installation
+            setTimeout(() => {
+                // Redirect to the install protocol
+                window.location.href = installLink;
 
-                if (data.installLink) {
-                    btn.innerText = "Check Home Screen";
-                    document.getElementById('fallbackSection').classList.remove('hidden');
-                    document.getElementById('manualLink').href = data.installLink;
-                    window.location.href = data.installLink;
-                    
-                    statusBox.innerHTML = `
-                        <div class="status-tag active">Success!</div>
-                        <p>If prompted, click <b>Install</b>.<br>The app will appear on your home screen.</p>
-                    `;
-                } else {
-                    throw new Error("No link provided.");
-                }
-            } catch (err) {
-                alert("Installation failed: " + err.message);
-                btn.disabled = false;
-                btn.innerText = "Try Again";
-                statusBox.innerHTML = originalHTML;
-            }
+                // Update UI to success state
+                btn.innerText = "Check Home Screen";
+                document.getElementById('fallbackSection').classList.remove('hidden');
+                document.getElementById('manualLink').href = installLink;
+                
+                statusBox.innerHTML = `
+                    <div class="status-tag active">Popup Sent!</div>
+                    <p>If you see a popup, click <b>Install</b>.<br>The app will overwrite the old one.</p>
+                `;
+            }, 1000);
         }
 
        async function getStatus() {
-    const statusBox = document.getElementById('statusBox');
-    const title = document.getElementById('title');
-    const udidDiv = document.getElementById('udid');
+            const statusBox = document.getElementById('statusBox');
+            const title = document.getElementById('title');
+            const udidDiv = document.getElementById('udid');
 
-    if (!udid) {
-        statusBox.innerHTML = "<b>No UDID detected.</b>";
-        return;
-    }
-
-    udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
-
-    try {
-        const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
-        const data = await response.json();
-
-        if (data.isPaid === true || String(data.isPaid).toLowerCase() === "true") {
-            
-            // CORRECTED: 72 Hours instead of 14 days
-            const seventyTwoHours = 72 * 60 * 60 * 1000;
-            const registrationDate = Number(data.reg_date) || Date.now();
-            const timeLeft = seventyTwoHours - (Date.now() - registrationDate);
-
-            if (timeLeft > 0) {
-                title.innerText = "Apple Processing";
-                const totalHours = Math.floor(timeLeft / (1000 * 60 * 60));
-                const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
-                
-                statusBox.innerHTML = `
-                    <div class="status-tag pending">Time Left: ${totalHours}h ${minutes}m</div>
-                    <p>Apple is activating your device.<br>This usually takes 72 hours total.</p>
-                `;
-            } else {
-                title.innerText = "Device Ready!";
-                statusBox.innerHTML = `
-                    <div class="status-tag active">Status: Active</div>
-                    <p>Activation complete! You can now install Kurde Store.</p>
-                    <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
-                `;
+            if (!udid) {
+                statusBox.innerHTML = "<b>No UDID detected.</b>";
+                return;
             }
-        } else {
-            title.innerText = "Activation Required";
-            statusBox.innerHTML = `
-                <div class="status-tag pending">Payment Not Found</div>
-                <p>Your UDID is registered but not yet paid.</p>
-                <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
-            `;
+
+            udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
+
+            try {
+                const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
+                const data = await response.json();
+
+                if (data.isPaid === true || String(data.isPaid).toLowerCase() === "true") {
+                    
+                    // 72 Hours Check
+                    const seventyTwoHours = 72 * 60 * 60 * 1000;
+                    const registrationDate = Number(data.reg_date) || Date.now();
+                    const timeLeft = seventyTwoHours - (Date.now() - registrationDate);
+
+                    if (timeLeft > 0) {
+                        title.innerText = "Apple Processing";
+                        const totalHours = Math.floor(timeLeft / (1000 * 60 * 60));
+                        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+                        
+                        statusBox.innerHTML = `
+                            <div class="status-tag pending">Time Left: ${totalHours}h ${minutes}m</div>
+                            <p>Apple is activating your device.<br>This usually takes 72 hours total.</p>
+                        `;
+                    } else {
+                        title.innerText = "Device Ready!";
+                        statusBox.innerHTML = `
+                            <div class="status-tag active">Status: Active</div>
+                            <p>Activation complete! You can now install Kurde Store.</p>
+                            <button id="installBtn" class="btn" onclick="startProvisioning()">Install Kurde Store</button>
+                        `;
+                    }
+                } else {
+                    title.innerText = "Activation Required";
+                    statusBox.innerHTML = `
+                        <div class="status-tag pending">Payment Not Found</div>
+                        <p>Your UDID is registered but not yet paid.</p>
+                        <a href="https://t.me/didolaw" class="btn btn-tg">Pay via Telegram</a>
+                    `;
+                }
+            } catch (err) {
+                title.innerText = "Connection Error";
+                statusBox.innerHTML = `<p class="error-text">API error. Try again later.</p>`;
+            }
         }
-    } catch (err) {
-        title.innerText = "Connection Error";
-        statusBox.innerHTML = `<p class="error-text">API error. Try again later.</p>`;
-    }
-}
 
         window.onload = getStatus;
     </script>
