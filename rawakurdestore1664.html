@@ -45,8 +45,7 @@
 
         <input type="hidden" id="originalIpaKey">
         <input type="hidden" id="originalIconKey">
-
-        <span class="label">Files</span>
+        <input type="hidden" id="originalFullIconUrl"> <span class="label">Files</span>
         <div id="iconInputContainer">
             <input type="file" id="iconFile" accept="image/*" placeholder="Icon (Optional on Update)">
             <div class="bar-container"><div class="bar" id="iconBar"></div></div>
@@ -85,10 +84,7 @@
 </div>
 
 <script>
-    // ✅ HTTPS LINK (SECURE)
     const API_URL = "https://xzkstdqajamnvervpc6ohennbe0durgb.lambda-url.eu-west-2.on.aws/";
-    
-    // ✅ BASE URL FOR S3
     const S3_BASE_URL = "https://kurde-store-data.s3.eu-west-2.amazonaws.com/";
 
     let allData = [];
@@ -103,16 +99,12 @@
         try {
             const zip = await JSZip.loadAsync(file);
             const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes(".app/"));
-            if (plistFile) {
+            if (plistFile && !isEditing) {
                 const content = await zip.files[plistFile].async("string");
                 let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
                 let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-                
-                // Only auto-fill if we are NOT editing
-                if (!isEditing) {
-                    if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
-                    if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
-                }
+                if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
+                if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
                 updateStatus("✅ Metadata Scanned");
             }
         } catch (e) { updateStatus("⚠️ Scan Error", true); }
@@ -126,35 +118,42 @@
         const bId = document.getElementById('bundleId').value;
 
         if(!name || !bId) return updateStatus("❌ Name and BundleID required", true);
-        
-        // Validation: New apps need files. Updates don't.
         if(!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need both Icon and IPA", true);
 
         btn.disabled = true;
         updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
-            // Get existing keys (if updating)
+            // Get existing data
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
+            let oldIconUrl = document.getElementById('originalFullIconUrl').value;
 
-            // UPLOAD LOGIC:
-            // 1. If user selected a new icon, upload it and get new key.
+            // 1. Handle ICON Upload or Preservation
+            let finalIconUrl = "";
+            
             if (iconFile) {
                 updateStatus("Uploading New Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-            } 
-            // 2. If NO new icon selected, we simply keep 'iconKey' as it is (the old one).
+                finalIconUrl = S3_BASE_URL + iconKey;
+            } else {
+                // No new file? Try to use the Key, if no key, use the Old URL (Legacy Support)
+                if (iconKey) {
+                    finalIconUrl = S3_BASE_URL + iconKey;
+                } else {
+                    finalIconUrl = oldIconUrl; // SAFETY FALLBACK
+                }
+            }
 
-            // 3. If user selected a new IPA, upload it.
+            // 2. Handle IPA Upload
+            let finalIpaUrl = "";
             if (ipaFile) {
                 updateStatus("Uploading New IPA...");
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
+                finalIpaUrl = S3_BASE_URL + ipaKey;
+            } else {
+                if (ipaKey) finalIpaUrl = S3_BASE_URL + ipaKey;
             }
-
-            // Construct full URLs for Store Front-end
-            const fullIconUrl = iconKey ? (S3_BASE_URL + iconKey) : "";
-            const fullIpaUrl = ipaKey ? (S3_BASE_URL + ipaKey) : "";
 
             const payload = {
                 action: "save_item",
@@ -168,13 +167,13 @@
                 isGame: document.getElementById('isGame').value === "true",
                 iconKey: iconKey,
                 ipaKey: ipaKey,
-                icon: fullIconUrl,
-                ipa: fullIpaUrl
+                icon: finalIconUrl, // This is now SAFE
+                ipa: finalIpaUrl
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
 
-            updateStatus("✅ Success! App Updated.");
+            updateStatus("✅ App Updated Successfully!");
             setTimeout(() => location.reload(), 1500);
         } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
     }
@@ -201,10 +200,7 @@
             allData = await res.json();
             renderLists(allData);
             updateStatus("Ready");
-        } catch (e) { 
-            console.error(e);
-            updateStatus("❌ Load Failed: " + e.message, true); 
-        }
+        } catch (e) { console.error(e); updateStatus("❌ Load Failed: " + e.message, true); }
     }
 
     function renderLists(items) {
@@ -213,16 +209,15 @@
         aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
         
         if (!items || items.length === 0) {
-            aList.innerHTML += "<p>No apps found.</p>";
-            return;
+            aList.innerHTML += "<p>No apps found.</p>"; return;
         }
 
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
             
-            // Prioritize the 'iconKey' for Admin Panel display
-            let iconSrc = item.iconKey ? (S3_BASE_URL + item.iconKey) : (item.icon || "https://via.placeholder.com/55");
+            // Smart Icon Display
+            let iconSrc = item.icon || (item.iconKey ? (S3_BASE_URL + item.iconKey) : "https://via.placeholder.com/55");
             const itemString = encodeURIComponent(JSON.stringify(item));
 
             card.innerHTML = `
@@ -245,16 +240,11 @@
         const item = JSON.parse(decodeURIComponent(encodedItem));
         isEditing = true;
         
-        // Switch UI to Edit Mode
         document.getElementById('formTitle').innerText = "🔄 Update: " + item.name;
         document.getElementById('btn').innerText = "Update App";
         document.getElementById('cancelBtn').style.display = "inline-block";
-        
-        // Hide Icon Input visually to keep UI clean for updates
-        // You can still see the file input if you really wanted to, but the label implies it's optional
         document.getElementById('iconFile').style.opacity = "0.5"; 
         
-        // Fill Form
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
@@ -263,11 +253,11 @@
         document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
         
-        // Store existing keys
+        // SAVE OLD DATA SO WE DON'T LOSE IT
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
+        document.getElementById('originalFullIconUrl').value = item.icon || ""; // Critical Fix
 
-        // Lock Bundle ID
         document.getElementById('bundleId').readOnly = true;
         document.getElementById('bundleId').style.opacity = "0.6";
         
@@ -275,12 +265,10 @@
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function resetForm() {
-        location.reload();
-    }
+    function resetForm() { location.reload(); }
 
     async function deleteApp(id, name) {
-        if (confirm(`Delete ${name}?\nThis will remove it from the store AND delete files from S3.`)) {
+        if (confirm(`Delete ${name}?`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
