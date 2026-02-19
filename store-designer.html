@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KurdeStore Master Design</title>
+    <style>
+        body { background-color: #000; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: 25px; }
+        
+        .box { background: #111; padding: 30px; border-radius: 24px; border: 1px solid #333; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
+        h2 { margin: 0 0 25px 0; background: -webkit-linear-gradient(45deg, #ff2d55, #ff5e3a); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px; font-weight: 800; }
+        
+        #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #1a1a1a; border-left: 4px solid #ff2d55; font-family: monospace; font-size: 13px; color: #fff; }
+
+        .label { font-size: 11px; color: #666; font-weight: 700; text-transform: uppercase; margin-top: 20px; display: block; letter-spacing: 1px; }
+        input, textarea { width: 100%; padding: 15px; margin: 10px 0; background: #1c1c1e; border: 1px solid #333; color: white; border-radius: 12px; box-sizing: border-box; font-family: inherit; font-size: 14px; transition: 0.2s; outline: none; }
+        input:focus, textarea:focus { border-color: #ff2d55; background: #2c2c2e; }
+        textarea { height: 100px; resize: vertical; }
+        
+        .row { display: flex; gap: 15px; align-items: center; }
+
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; background: #1c1c1e; padding: 15px; border-radius: 12px; margin-top: 10px; border: 1px solid #333; }
+        .toggle-label { font-weight: 600; font-size: 15px; }
+        input[type="checkbox"] { width: 24px; height: 24px; accent-color: #ff2d55; margin: 0; cursor: pointer; }
+
+        .save-btn { width: 100%; padding: 18px; background: linear-gradient(45deg, #ff2d55, #ff5e3a); color: white; border: none; border-radius: 16px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 30px; transition: 0.2s; }
+        .save-btn:hover { box-shadow: 0 10px 40px rgba(255, 45, 85, 0.5); transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="box">
+        <h2>🎨 Store Architecture</h2>
+        <div id="status-box">Loading configuration...</div>
+
+        <span class="label">Hero Banners (Paste Image URLs, one per line)</span>
+        <textarea id="bannerUrls" placeholder="https://example.com/banner1.jpg&#10;https://example.com/banner2.jpg"></textarea>
+        
+        <span class="label">Global Theme Color</span>
+        <div class="row">
+            <input type="color" id="themeColor" value="#ff2d55" style="height: 50px; width: 60px; padding: 0; border: none;">
+            <input type="text" id="themeHex" placeholder="#ff2d55" readonly>
+        </div>
+
+        <span class="label">Feature Control</span>
+        <div class="toggle-row">
+            <span class="toggle-label">🔔 Enable Notifications</span>
+            <input type="checkbox" id="showNotif">
+        </div>
+        <div class="toggle-row">
+            <span class="toggle-label">👤 Enable Profile Tab</span>
+            <input type="checkbox" id="showProfile">
+        </div>
+        <div class="toggle-row" style="border-color: #ff3b3050;">
+            <span class="toggle-label" style="color: #ff453a;">⚠️ Maintenance Mode</span>
+            <input type="checkbox" id="maintenance">
+        </div>
+
+        <button onclick="saveConfig()" class="save-btn">Publish Changes</button>
+    </div>
+</div>
+
+<script>
+    const API_URL = "https://ctpindxbsbgamx7bqgmurp2j4i0jqbus.lambda-url.eu-west-2.on.aws/";
+    const CONFIG_ID = "store_config_v1";
+
+    window.onload = loadConfig;
+
+    async function loadConfig() {
+        const status = document.getElementById('status-box');
+        status.style.display = 'block';
+        
+        try {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
+            const allData = await res.json();
+            
+            // Find the special config item
+            const config = allData.find(item => item.appId === CONFIG_ID);
+            
+            if (config) {
+                document.getElementById('bannerUrls').value = (config.banners || []).join('\n');
+                document.getElementById('showNotif').checked = config.showNotif || false;
+                document.getElementById('showProfile').checked = config.showProfile || false;
+                document.getElementById('maintenance').checked = config.maintenance || false;
+                if (config.themeColor) {
+                    document.getElementById('themeColor').value = config.themeColor;
+                    document.getElementById('themeHex').value = config.themeColor;
+                }
+                updateStatus("✅ Configuration Loaded", false);
+            } else {
+                updateStatus("⚠️ No config found. Save to create one.", true);
+            }
+        } catch (e) { updateStatus("❌ Connection Error: " + e.message, true); }
+    }
+
+    async function saveConfig() {
+        updateStatus("🚀 Publishing...", false);
+        
+        const banners = document.getElementById('bannerUrls').value.split('\n').filter(url => url.trim() !== "");
+        const color = document.getElementById('themeColor').value;
+
+        const payload = {
+            action: "save_item",
+            bundleId: CONFIG_ID, // Acts as Primary Key
+            appId: CONFIG_ID,
+            name: "⚠️ System Config", // Hidden name
+            isGame: "config", // Hidden type
+            
+            // UI DATA
+            banners: banners,
+            themeColor: color,
+            showNotif: document.getElementById('showNotif').checked,
+            showProfile: document.getElementById('showProfile').checked,
+            maintenance: document.getElementById('maintenance').checked,
+            updatedAt: new Date().toISOString()
+        };
+
+        try {
+            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            updateStatus("✅ Store Updated! Restart app to see changes.", false);
+        } catch (e) { updateStatus("❌ Save Failed: " + e.message, true); }
+    }
+
+    document.getElementById('themeColor').oninput = function() {
+        document.getElementById('themeHex').value = this.value;
+    };
+
+    function updateStatus(msg, isError) {
+        const box = document.getElementById('status-box');
+        box.style.display = 'block';
+        box.style.color = isError ? '#ff453a' : '#30d158';
+        box.style.borderColor = isError ? '#ff453a' : '#30d158';
+        box.innerText = msg;
+    }
+</script>
+</body>
+</html>
