@@ -3,75 +3,87 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KurdeStore Ultimate Control</title>
+    <title>KurdeStore God Mode</title>
     <style>
-        body { background-color: #000; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 40px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 650px; display: flex; flex-direction: column; gap: 25px; }
+        body { background-color: #050505; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 40px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 25px; }
         
         .box { background: #111; padding: 30px; border-radius: 24px; border: 1px solid #333; box-shadow: 0 20px 50px rgba(0,0,0,0.7); }
-        h2 { margin: 0 0 25px 0; background: -webkit-linear-gradient(45deg, #0a84ff, #5e5ce6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px; font-weight: 800; }
+        h2 { margin: 0 0 25px 0; background: -webkit-linear-gradient(45deg, #0a84ff, #5e5ce6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px; font-weight: 800; display: flex; align-items: center; gap: 10px; }
         
         #status-box { display: none; margin-bottom: 20px; padding: 15px; border-radius: 12px; background: #1a1a1a; border-left: 4px solid #0a84ff; font-family: monospace; font-size: 13px; color: #fff; }
 
-        .label { font-size: 11px; color: #666; font-weight: 700; text-transform: uppercase; margin-top: 25px; display: block; letter-spacing: 1px; }
-        input, textarea, select { width: 100%; padding: 15px; margin: 10px 0; background: #1c1c1e; border: 1px solid #333; color: white; border-radius: 12px; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: 0.2s; }
+        .label { font-size: 11px; color: #888; font-weight: 700; text-transform: uppercase; margin-top: 25px; display: block; letter-spacing: 1px; }
+        input, textarea, select { width: 100%; padding: 15px; margin: 8px 0; background: #1c1c1e; border: 1px solid #333; color: white; border-radius: 12px; box-sizing: border-box; font-family: inherit; font-size: 14px; outline: none; transition: 0.2s; }
         input:focus, textarea:focus { border-color: #0a84ff; background: #2c2c2e; }
         textarea { height: 80px; resize: vertical; }
 
         .row { display: flex; gap: 15px; }
         
-        .toggle-row { display: flex; justify-content: space-between; align-items: center; background: #1c1c1e; padding: 15px; border-radius: 12px; margin-top: 10px; border: 1px solid #333; }
+        .toggle-row { display: flex; justify-content: space-between; align-items: center; background: #1c1c1e; padding: 15px; border-radius: 12px; margin-top: 10px; border: 1px solid #333; transition: 0.2s; }
+        .toggle-row:hover { background: #252525; }
         .toggle-label { font-weight: 600; font-size: 15px; }
         input[type="checkbox"] { width: 24px; height: 24px; accent-color: #0a84ff; margin: 0; cursor: pointer; }
 
-        .save-btn { width: 100%; padding: 18px; background: linear-gradient(45deg, #0a84ff, #5e5ce6); color: white; border: none; border-radius: 16px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 30px; transition: 0.2s; }
-        .save-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 30px rgba(10, 132, 255, 0.4); }
+        .save-btn { width: 100%; padding: 18px; background: linear-gradient(45deg, #0a84ff, #5e5ce6); color: white; border: none; border-radius: 16px; font-weight: bold; font-size: 16px; cursor: pointer; margin-top: 30px; transition: 0.2s; box-shadow: 0 10px 30px rgba(10, 132, 255, 0.3); }
+        .save-btn:hover { transform: translateY(-2px); box-shadow: 0 15px 40px rgba(10, 132, 255, 0.5); }
+        
+        .danger-zone { border: 1px solid #ff3b30; background: #2a0b0b; }
+        .danger-text { color: #ff3b30; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="box">
-        <h2>📢 Store Command Center</h2>
+        <h2>🎛️ Store Command Center</h2>
         <div id="status-box">Loading...</div>
 
-        <span class="label">🔴 Send In-App Alert</span>
-        <input type="text" id="notifTitle" placeholder="Title (e.g., 'New Update!')">
-        <textarea id="notifBody" placeholder="Message (e.g., 'GTA San Andreas is now available without revoke.')"></textarea>
+        <span class="label danger-text">🚨 Emergency Zone</span>
+        <div class="toggle-row danger-zone">
+            <span class="toggle-label danger-text">⚠️ Maintenance Mode (Lock App)</span>
+            <input type="checkbox" id="maintenance">
+        </div>
+        <input type="text" id="maintenanceMsg" placeholder="Maintenance Message (e.g. 'Server Upgrade in progress...')">
+
+        <span class="label">📢 Notification System</span>
+        <input type="text" id="notifTitle" placeholder="Popup Title">
+        <textarea id="notifBody" placeholder="Popup Message"></textarea>
         <div class="toggle-row">
-            <span class="toggle-label">Show Alert on App Launch?</span>
+            <span class="toggle-label">Show Popup on Launch?</span>
             <input type="checkbox" id="showNotif">
         </div>
 
-        <span class="label">📂 Smart Lists Logic</span>
+        <span class="label">⭐ Spotlight</span>
+        <input type="text" id="featuredAppId" placeholder="Enter App Bundle ID to Feature (e.g. com.pubg.hack)">
+        
+        <span class="label">🎨 Layout & Links</span>
+        <div class="row">
+            <select id="layoutStyle">
+                <option value="list">List View (Standard)</option>
+                <option value="grid">Grid View (Compact)</option>
+            </select>
+        </div>
+        <input type="text" id="telegramLink" placeholder="Telegram Channel Link (https://t.me/...)">
+        
+        <span class="label">📂 Sections</span>
         <div class="toggle-row">
-            <span class="toggle-label">Show 'Added Today' Section?</span>
+            <span class="toggle-label">Show 'Added Today'</span>
             <input type="checkbox" id="showToday">
         </div>
         <div class="toggle-row">
-            <span class="toggle-label">Show 'Recently Updated' Section?</span>
+            <span class="toggle-label">Show 'Recently Updated'</span>
             <input type="checkbox" id="showUpdated">
         </div>
 
-        <span class="label">🏷️ Custom Categories (Comma Separated)</span>
-        <input type="text" id="categories" placeholder="Social, Action, Hacked, Tools">
-        <p style="font-size: 12px; color: #666; margin-top: -5px;">* These will appear as tabs in the app.</p>
-
-        <span class="label">🎨 Visuals & Banners</span>
-        <textarea id="bannerUrls" style="height: 100px;" placeholder="https://img1.jpg&#10;https://img2.jpg"></textarea>
-        
+        <span class="label">🖌️ Visuals</span>
+        <textarea id="bannerUrls" placeholder="Banner URLs (One per line)"></textarea>
         <div class="row">
-            <div style="flex:1;">
-                <span class="label" style="margin-top:0;">Theme Color</span>
-                <input type="color" id="themeColor" value="#0a84ff" style="height:45px; padding:0;">
-            </div>
-            <div style="flex:1;">
-                <span class="label" style="margin-top:0;">Color Hex</span>
-                <input type="text" id="themeHex" readonly>
-            </div>
+            <input type="color" id="themeColor" value="#0a84ff" style="height:45px; flex:0.2;">
+            <input type="text" id="themeHex" readonly style="flex:0.8;">
         </div>
 
-        <button onclick="saveConfig()" class="save-btn">🚀 Publish Updates</button>
+        <button onclick="saveConfig()" class="save-btn">🚀 Publish Changes</button>
     </div>
 </div>
 
@@ -90,15 +102,23 @@
             const config = allData.find(item => item.appId === CONFIG_ID);
 
             if (config) {
+                // Emergency
+                document.getElementById('maintenance').checked = config.maintenance || false;
+                document.getElementById('maintenanceMsg').value = config.maintenanceMsg || "";
+                
                 // Notifications
                 document.getElementById('notifTitle').value = config.notifTitle || "";
                 document.getElementById('notifBody').value = config.notifBody || "";
                 document.getElementById('showNotif').checked = config.showNotif || false;
                 
-                // Lists
+                // Featured
+                document.getElementById('featuredAppId').value = config.featuredAppId || "";
+                
+                // Layout
+                document.getElementById('layoutStyle').value = config.layoutStyle || "list";
+                document.getElementById('telegramLink').value = config.telegramLink || "";
                 document.getElementById('showToday').checked = config.showToday || false;
                 document.getElementById('showUpdated').checked = config.showUpdated || false;
-                document.getElementById('categories').value = (config.categories || []).join(', ');
 
                 // Visuals
                 document.getElementById('bannerUrls').value = (config.banners || []).join('\n');
@@ -126,17 +146,25 @@
             name: "⚠️ System Config",
             isGame: "config",
             
-            // 1. Notification Data
+            // 1. Emergency
+            maintenance: document.getElementById('maintenance').checked,
+            maintenanceMsg: document.getElementById('maintenanceMsg').value,
+
+            // 2. Notification
             notifTitle: document.getElementById('notifTitle').value,
             notifBody: document.getElementById('notifBody').value,
             showNotif: document.getElementById('showNotif').checked,
 
-            // 2. Lists & Categories
+            // 3. Featured
+            featuredAppId: document.getElementById('featuredAppId').value,
+
+            // 4. Layout
+            layoutStyle: document.getElementById('layoutStyle').value,
+            telegramLink: document.getElementById('telegramLink').value,
             showToday: document.getElementById('showToday').checked,
             showUpdated: document.getElementById('showUpdated').checked,
-            categories: document.getElementById('categories').value.split(',').map(s => s.trim()).filter(s => s),
 
-            // 3. Visuals
+            // 5. Visuals
             banners: document.getElementById('bannerUrls').value.split('\n').filter(s => s.trim()),
             themeColor: document.getElementById('themeColor').value,
             updatedAt: new Date().toISOString()
@@ -144,7 +172,7 @@
 
         try {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            status.innerText = "✅ Store Updated! Check App.";
+            status.innerText = "✅ Store Updated! Restart App.";
             status.style.color = "#30d158";
         } catch (e) { status.innerText = "❌ Save Failed"; status.style.color = "#ff3b30"; }
     }
