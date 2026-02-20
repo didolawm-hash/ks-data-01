@@ -9,17 +9,40 @@ const app = express();
 app.use(express.text({ type: '*/*' })); 
 app.use(express.json());
 app.use(cors());
+
+// Serve static assets (images, css, etc.)
 app.use(express.static(__dirname));
 
 const uri = process.env.DATABASE_URL;
 const client = new MongoClient(uri);
 
-// 1. HOME PAGE
+// ==========================================
+// 1. EXPLICIT HTML PAGE ROUTES
+// ==========================================
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. APPLE UDID ENROLLMENT (Fixes the 500 Error)
+app.get('/success.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'success.html'));
+});
+
+app.get('/rawakurdestore1664.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'rawakurdestore1664.html'));
+});
+
+app.get('/store-designer.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'store-designer.html'));
+});
+
+app.get('/store.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'store.html'));
+});
+
+
+// ==========================================
+// 2. APPLE UDID ENROLLMENT
+// ==========================================
 app.post('/enroll', async (req, res) => {
     console.log("Enrollment request received from iPhone");
     try {
@@ -56,7 +79,10 @@ app.post('/enroll', async (req, res) => {
     }
 });
 
-// 3. STATUS CHECK (For success.html)
+
+// ==========================================
+// 3. API ROUTES (Status & App List)
+// ==========================================
 app.get('/status', async (req, res) => {
     const { udid } = req.query;
     try {
@@ -64,8 +90,25 @@ app.get('/status', async (req, res) => {
         const db = client.db("KurdeStore");
         const user = await db.collection("kurdestore_users").findOne({ udid: udid });
         res.json(user || { isPaid: false, not_found: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
+// This is required for your store to actually list the apps
+app.get('/get-apps', async (req, res) => {
+    try {
+        await client.connect();
+        const db = client.db("KurdeStore");
+        const apps = await db.collection("Apps").find({}).toArray();
+        res.json(apps);
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+// ==========================================
+// 4. START SERVER
+// ==========================================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
