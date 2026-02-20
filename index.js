@@ -6,7 +6,7 @@ const AWS = require('aws-sdk');
 
 const app = express();
 
-// 🚨 Middleware setup
+// 🚨 Middleware setup - JSON must be first
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -27,11 +27,11 @@ const s3 = new AWS.S3({
 });
 
 const SPACES_BUCKET = 'my-app-store';
-// ✅ Updated to use the CDN endpoint for public access
+// ✅ Use CDN URL for public file access
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
-// 1. PAGE ROUTES
+// 1. HTML PAGE ROUTES
 // ==========================================
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
@@ -136,7 +136,7 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🛠️ DATA NORMALIZER: Fixed for your icons/apps/games folders
+            // 🛠️ DATA NORMALIZER: Fixes Icon & Info for the Flutter app
             const finalData = {
                 ...body,
                 appId: appId,
@@ -160,7 +160,7 @@ app.post('/store-api', async (req, res) => {
                 Key: key,
                 Expires: 600,
                 ContentType: contentType,
-                ACL: 'public-read'
+                ACL: 'public-read' // Forces public access for installs
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
