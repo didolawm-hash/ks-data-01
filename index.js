@@ -27,11 +27,11 @@ const s3 = new AWS.S3({
 });
 
 const SPACES_BUCKET = 'my-app-store';
-// ✅ Using the CDN URL for high-speed public access
+// ✅ Updated to use the CDN endpoint for high-speed public access
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
-// 1. PAGE ROUTES
+// 1. HTML PAGE ROUTES
 // ==========================================
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
@@ -63,7 +63,7 @@ app.post('/', async (req, res) => {
 
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
     } catch (e) {
-        res.status(500).send("Server Error: " + e.message);
+        res.status(500).send("Internal Server Error: " + e.message);
     }
 });
 
@@ -136,7 +136,7 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🛠️ DATA NORMALIZER: Fixes Icon & Info for your folders
+            // 🛠️ DATA NORMALIZER: Maps 'subtitle' to 'info' so Flutter shows it
             const finalData = {
                 ...body,
                 appId: appId,
@@ -160,7 +160,7 @@ app.post('/store-api', async (req, res) => {
                 Key: key,
                 Expires: 600,
                 ContentType: contentType,
-                ACL: 'public-read' // Automatically makes the file public
+                ACL: 'public-read' // 🔓 Automatically makes files public for install
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
