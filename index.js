@@ -1,23 +1,29 @@
 const express = require('express');
 const { MongoClient } = require('mongodb');
 const cors = require('cors');
+const path = require('path'); // Added this to find your HTML file
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-// 1. Health Check Route (Guarantees a Green Deployment)
+// This tells the server: "If someone asks for a file (like CSS or Images), look in this folder."
+app.use(express.static(__dirname));
+
+const uri = process.env.DATABASE_URL; 
+
+// 1. Serve your HTML Website (When you visit the link in a browser)
 app.get('/', (req, res) => {
-    res.status(200).send('🚀 Server is alive and Health Check passed!');
+    // This sends your index.html file to the user's screen
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. Main API Route (Connects to DB ONLY when requested)
+// 2. Main API Route (For your Flutter App & Designer Panel to save/load apps)
 app.post('/', async (req, res) => {
     const { action } = req.body;
-    const uri = process.env.DATABASE_URL;
-
+    
     if (!uri) {
-        return res.status(500).json({ error: "CRITICAL: DATABASE_URL environment variable is missing in DigitalOcean settings!" });
+        return res.status(500).json({ error: "DATABASE_URL missing!" });
     }
 
     try {
@@ -28,20 +34,19 @@ app.post('/', async (req, res) => {
 
         if (action === "list_apps") {
             const apps = await collection.find({}).toArray();
-            await client.close(); // Close connection when done
+            await client.close();
             return res.json(apps);
         }
         
         await client.close();
         res.status(400).json({ error: "Invalid Action" });
     } catch (e) { 
-        console.error("Database connection failed:", e);
+        console.error("DB Error:", e);
         res.status(500).json({ error: e.message }); 
     }
 });
 
-// 3. Start the Server (Crucial for DigitalOcean)
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Safe Mode Server running on port ${PORT}`);
+    console.log(`✅ Server running on port ${PORT}`);
 });
