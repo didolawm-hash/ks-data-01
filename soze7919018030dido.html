@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kurde Store - Admin Panel</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; padding: 20px; color: #1c1c1e; }
+        .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        h1 { text-align: center; color: #000; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e5e5ea; word-break: break-all; }
+        th { background-color: #f8f8f8; color: #8e8e93; font-weight: 600; }
+        .status { padding: 5px 10px; border-radius: 12px; font-weight: bold; font-size: 12px; display: inline-block; }
+        .unpaid { background: #ffebee; color: #d32f2f; }
+        .paid { background: #e8f5e9; color: #2e7d32; }
+        .btn { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
+        .btn-approve { background: #34c759; }
+        .btn-revoke { background: #ff3b30; }
+        .btn:hover { opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Kurde Store Admin 👑</h1>
+    <table id="usersTable">
+        <thead>
+            <tr>
+                <th>UDID</th>
+                <th>Registration Date</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody id="usersBody">
+            <tr><td colspan="4" style="text-align: center;">Loading users...</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<script>
+    const API_URL = "https://api.kurde.store";
+
+    async function loadUsers() {
+        try {
+            const response = await fetch(`${API_URL}/api/users`);
+            const users = await response.json();
+            const tbody = document.getElementById('usersBody');
+            tbody.innerHTML = '';
+
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No users found yet.</td></tr>';
+                return;
+            }
+
+            users.forEach(user => {
+                const date = new Date(user.reg_date).toLocaleString();
+                const statusHtml = user.isPaid 
+                    ? `<span class="status paid">PAID</span>` 
+                    : `<span class="status unpaid">UNPAID</span>`;
+                
+                const btnHtml = user.isPaid
+                    ? `<button class="btn btn-revoke" onclick="updateStatus('${user.udid}', false)">Revoke Access</button>`
+                    : `<button class="btn btn-approve" onclick="updateStatus('${user.udid}', true)">Approve Payment</button>`;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="font-family: monospace;">${user.udid}</td>
+                        <td>${date}</td>
+                        <td>${statusHtml}</td>
+                        <td>${btnHtml}</td>
+                    </tr>
+                `;
+            });
+        } catch (error) {
+            console.error("Error loading users:", error);
+            document.getElementById('usersBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading users.</td></tr>';
+        }
+    }
+
+    async function updateStatus(udid, isPaid) {
+        if (!confirm(`Are you sure you want to change this user's status to ${isPaid ? 'PAID' : 'UNPAID'}?`)) return;
+
+        try {
+            const response = await fetch(`${API_URL}/api/update-status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ udid, isPaid })
+            });
+
+            if (response.ok) {
+                loadUsers(); // Refresh the table
+            } else {
+                alert("Failed to update status.");
+            }
+        } catch (error) {
+            alert("API Error.");
+        }
+    }
+
+    // Load users when page opens
+    loadUsers();
+</script>
+
+</body>
+</html>
