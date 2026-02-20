@@ -5,6 +5,8 @@ const path = require('path');
 const AWS = require('aws-sdk');
 
 const app = express();
+
+// 🚨 Middleware: JSON MUST BE FIRST
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -23,6 +25,7 @@ const s3 = new AWS.S3({
     region: 'lon1',
     signatureVersion: 'v4'
 });
+
 const SPACES_BUCKET = 'my-app-store';
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
@@ -37,22 +40,40 @@ app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.ht
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
-// 2. UDID & STATUS
+// 2. APPLE UDID ENROLLMENT
 // ==========================================
 app.post('/', async (req, res) => {
     try {
         const body = req.body;
         const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
         const udid = udidMatch ? udidMatch[1] : null;
+
         if (!udid) return res.status(400).send("UDID not found");
+
         await client.connect();
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne(
+        const db = client.db("KurdeStore");
+        const users = db.collection("kurdestore_users");
+
+        await users.updateOne(
             { udid: udid },
             { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
             { upsert: true }
         );
+
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { res.status(500).send("Internal Server Error: " + e.message); }
+});
+
+// ==========================================
+// 3. STORE & ADMIN API
+// ==========================================
+app.get('/status', async (req, res) => {
+    const { udid } = req.query;
+    try {
+        await client.connect();
+        const user = await client.db("KurdeStore").collection("kurdestore_users").findOne({ udid: udid });
+        res.json(user || { isPaid: false, not_found: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/get-apps', async (req, res) => {
@@ -63,8 +84,17 @@ app.get('/get-apps', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+app.post('/api/update-status', async (req, res) => {
+    const { udid, isPaid } = req.body;
+    try {
+        await client.connect();
+        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ==========================================
-// 🚀 3. THE APP MANAGER API (CLEANUP ADDED)
+// 🚀 4. APP MANAGER API (CLEANUP & NORMALIZER)
 // ==========================================
 app.post('/store-api', async (req, res) => {
     try {
@@ -103,43 +133,34 @@ app.post('/store-api', async (req, res) => {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            // 🔓 RE-ADDING ACL BUT WITH SIGNATURE FIX
             const params = {
                 Bucket: SPACES_BUCKET,
                 Key: key,
                 Expires: 600,
                 ContentType: contentType,
-                ACL: 'public-read' 
+                ACL: 'public-read' // Forces public access for installs
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
 
-        // 🗑️ NEW: DELETE APP AND FILES FROM STORAGE
+        // 🗑️ DELETE APP AND ITS FILES
         if (action === "delete_app") {
             const bundleId = body.bundleId;
             const appData = await appsCollection.findOne({ appId: bundleId });
-
             if (appData) {
-                // Delete Icon from Spaces
-                if (appData.iconKey) {
-                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
-                }
-                // Delete IPA from Spaces
-                if (appData.ipaKey) {
-                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
-                }
+                if (appData.iconKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
+                if (appData.ipaKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
             }
-
             await appsCollection.deleteOne({ appId: bundleId });
-            return res.json({ success: true, message: "App and files deleted" });
+            return res.json({ success: true });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
-// 4. PLIST GENERATOR
+// 5. OTA PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
