@@ -43,7 +43,7 @@ app.get('/store.html', (req, res) => {
 // ==========================================
 // 2. APPLE UDID ENROLLMENT
 // ==========================================
-app.post('/enroll', async (req, res) => {
+app.post('/', async (req, res) => {
     console.log("Enrollment request received from iPhone");
     try {
         const body = req.body;
