@@ -25,9 +25,6 @@ const s3 = new AWS.S3({
 });
 const SPACES_BUCKET = 'my-app-store';
 
-// ✅ This is your PUBLIC CDN link. iOS needs this to install apps!
-const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
-
 // ==========================================
 // 1. PAGE ROUTES
 // ==========================================
@@ -39,35 +36,31 @@ app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.ht
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
-// 2. UDID & STATUS
+// 2. STORE API (WITH AUTOMATIC VIP LINKS)
 // ==========================================
-app.post('/', async (req, res) => {
-    try {
-        const body = req.body;
-        const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
-        const udid = udidMatch ? udidMatch[1] : null;
-        if (!udid) return res.status(400).send("UDID not found");
-        await client.connect();
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne(
-            { udid: udid },
-            { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
-            { upsert: true }
-        );
-        return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
-    } catch (e) { res.status(500).send(e.message); }
-});
-
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
-        res.json(apps);
+        
+        // 🛠️ GENERATE VIP LINKS FOR ICONS
+        const appsWithVipLinks = apps.map(app => {
+            if (app.iconKey) {
+                app.icon = s3.getSignedUrl('getObject', {
+                    Bucket: SPACES_BUCKET,
+                    Key: app.iconKey,
+                    Expires: 3600 // Link works for 1 hour
+                });
+            }
+            // Map 'info' for Flutter compatibility
+            app.info = app.info || app.subtitle || "";
+            return app;
+        });
+
+        res.json(appsWithVipLinks);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ==========================================
-// 🚀 3. THE APP MANAGER API (CLEANUP & PUBLIC FIX)
-// ==========================================
 app.post('/store-api', async (req, res) => {
     try {
         await client.connect();
@@ -86,35 +79,14 @@ app.post('/store-api', async (req, res) => {
         if (action === "save_item") {
             const appId = body.appId || body.bundleId;
             delete body.action;
-
-            // 🛠️ DATA NORMALIZER: Forces the use of the PUBLIC CDN URL
-            const finalData = {
-                ...body,
-                appId: appId,
-                bundleId: appId,
-                info: body.info || body.subtitle || "", 
-                icon: body.icon || (body.iconKey ? `${CDN_URL}/${body.iconKey}` : ""),
-                ipa: body.ipa || (body.ipaKey ? `${CDN_URL}/${body.ipaKey}` : ""),
-                updatedAt: new Date().toISOString()
-            };
-
-            await appsCollection.updateOne({ appId: appId }, { $set: finalData }, { upsert: true });
+            await appsCollection.updateOne({ appId: appId }, { $set: body }, { upsert: true });
             return res.json({ success: true });
         }
 
         if (action === "get_url") {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
-            
-            // 🔓 Use putObject WITHOUT ACL to avoid the stuck bar. 
-            // We rely on the Space being set to Public File Listing.
-            const params = {
-                Bucket: SPACES_BUCKET,
-                Key: key,
-                Expires: 600,
-                ContentType: contentType
-            };
-
+            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType };
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
@@ -122,13 +94,10 @@ app.post('/store-api', async (req, res) => {
         if (action === "delete_app") {
             const bundleId = body.bundleId;
             const appData = await appsCollection.findOne({ appId: bundleId });
-
             if (appData) {
-                // Delete Icon and IPA from Storage automatically
                 if (appData.iconKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
                 if (appData.ipaKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
             }
-
             await appsCollection.deleteOne({ appId: bundleId });
             return res.json({ success: true });
         }
@@ -136,21 +105,30 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 4. PLIST GENERATOR (CRITICAL FOR INSTALLS)
+// 3. PLIST GENERATOR (WITH AUTOMATIC VIP IPA LINK)
 // ==========================================
-app.get('/plist', (req, res) => {
-    let { ipaUrl, bundleId, name } = req.query;
-    
-    // Force CDN link in the Plist so Apple can download it
-    if (ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
-        ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
-    }
+app.get('/plist', async (req, res) => {
+    const { bundleId, name } = req.query;
+    try {
+        await client.connect();
+        const appData = await client.db("KurdeStore").collection("Apps").findOne({ appId: bundleId });
+        
+        if (!appData || !appData.ipaKey) return res.status(404).send("App or IPA not found");
 
-    const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
+        // 🛠️ GENERATE VIP LINK FOR IPA
+        const vipIpaUrl = s3.getSignedUrl('getObject', {
+            Bucket: SPACES_BUCKET,
+            Key: appData.ipaKey,
+            Expires: 3600
+        });
+
+        const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${ipaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
-    res.set('Content-Type', 'text/xml');
-    res.send(plistXml);
+<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${vipIpaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
+        
+        res.set('Content-Type', 'text/xml');
+        res.send(plistXml);
+    } catch (e) { res.status(500).send(e.message); }
 });
 
 const PORT = process.env.PORT || 8080;
