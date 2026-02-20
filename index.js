@@ -6,7 +6,7 @@ const AWS = require('aws-sdk');
 
 const app = express();
 
-// 🚨 Middleware setup - JSON must be first
+// 🚨 Middleware setup - JSON MUST BE FIRST
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -27,11 +27,11 @@ const s3 = new AWS.S3({
 });
 
 const SPACES_BUCKET = 'my-app-store';
-// ✅ Use CDN URL for public file access
+// ✅ Using the CDN URL for high-speed public access
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
-// 1. HTML PAGE ROUTES
+// 1. PAGE ROUTES
 // ==========================================
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
@@ -63,7 +63,7 @@ app.post('/', async (req, res) => {
 
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
     } catch (e) {
-        res.status(500).send("Internal Server Error: " + e.message);
+        res.status(500).send("Server Error: " + e.message);
     }
 });
 
@@ -136,7 +136,7 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🛠️ DATA NORMALIZER: Fixes Icon & Info for the Flutter app
+            // 🛠️ DATA NORMALIZER: Fixes Icon & Info for your folders
             const finalData = {
                 ...body,
                 appId: appId,
@@ -160,7 +160,7 @@ app.post('/store-api', async (req, res) => {
                 Key: key,
                 Expires: 600,
                 ContentType: contentType,
-                ACL: 'public-read' // Forces public access for installs
+                ACL: 'public-read' // Automatically makes the file public
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
