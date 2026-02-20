@@ -23,24 +23,18 @@ const client = new MongoClient(uri);
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
-
 app.get('/success.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'success.html'));
 });
-
 app.get('/rawakurdestore1664.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'rawakurdestore1664.html'));
 });
-
 app.get('/store-designer.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'store-designer.html'));
 });
-
 app.get('/store.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'store.html'));
 });
-
-// 👑 Your Secret Admin Page
 app.get('/soze7919018030dido.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'soze7919018030dido.html'));
 });
@@ -55,9 +49,7 @@ app.post('/', async (req, res) => {
         const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
         const udid = udidMatch ? udidMatch[1] : null;
 
-        if (!udid) {
-            return res.status(400).send("UDID not found");
-        }
+        if (!udid) return res.status(400).send("UDID not found");
 
         await client.connect();
         const db = client.db("KurdeStore");
@@ -71,7 +63,6 @@ app.post('/', async (req, res) => {
 
         console.log(`Success! UDID ${udid} saved.`);
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
-
     } catch (e) {
         res.status(500).send("Internal Server Error: " + e.message);
     }
@@ -87,9 +78,7 @@ app.get('/status', async (req, res) => {
         const db = client.db("KurdeStore");
         const user = await db.collection("kurdestore_users").findOne({ udid: udid });
         res.json(user || { isPaid: false, not_found: true });
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.get('/get-apps', async (req, res) => {
@@ -98,13 +87,11 @@ app.get('/get-apps', async (req, res) => {
         const db = client.db("KurdeStore");
         const apps = await db.collection("Apps").find({}).toArray();
         res.json(apps);
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
-// 4. ADMIN PANEL ROUTES
+// 4. ADMIN PANEL ROUTES (UDID Management)
 // ==========================================
 app.get('/api/users', async (req, res) => {
     try {
@@ -112,9 +99,7 @@ app.get('/api/users', async (req, res) => {
         const db = client.db("KurdeStore");
         const users = await db.collection("kurdestore_users").find({}).sort({reg_date: -1}).toArray();
         res.json(users);
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 app.post('/api/update-status', async (req, res) => {
@@ -126,30 +111,22 @@ app.post('/api/update-status', async (req, res) => {
             { udid: udid },
             { $set: { isPaid: isPaid } }
         );
-        res.json({ success: true, message: `Updated to Paid: ${isPaid}` });
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// 🚀 NEW: Timer Bypass Route
 app.post('/api/bypass-time', async (req, res) => {
     const { udid } = req.body;
     try {
         await client.connect();
         const db = client.db("KurdeStore");
-        
-        // Subtract 73 hours from the current time
         const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
-
         await db.collection("kurdestore_users").updateOne(
             { udid: udid },
             { $set: { reg_date: pastDate } }
         );
-        res.json({ success: true, message: `Timer bypassed` });
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
@@ -157,10 +134,7 @@ app.post('/api/bypass-time', async (req, res) => {
 // ==========================================
 app.get('/plist', (req, res) => {
     const { ipaUrl, bundleId, name } = req.query;
-
-    if (!ipaUrl || !bundleId || !name) {
-        return res.status(400).send("Missing parameters");
-    }
+    if (!ipaUrl || !bundleId || !name) return res.status(400).send("Missing parameters");
 
     const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -171,36 +145,86 @@ app.get('/plist', (req, res) => {
         <dict>
             <key>assets</key>
             <array>
-                <dict>
-                    <key>kind</key>
-                    <string>software-package</string>
-                    <key>url</key>
-                    <string>${ipaUrl}</string>
-                </dict>
+                <dict><key>kind</key><string>software-package</string><key>url</key><string>${ipaUrl}</string></dict>
             </array>
             <key>metadata</key>
             <dict>
-                <key>bundle-identifier</key>
-                <string>${bundleId}</string>
-                <key>bundle-version</key>
-                <string>1.0</string>
-                <key>kind</key>
-                <string>software</string>
-                <key>title</key>
-                <string>${name}</string>
+                <key>bundle-identifier</key><string>${bundleId}</string>
+                <key>bundle-version</key><string>1.0</string>
+                <key>kind</key><string>software</string>
+                <key>title</key><string>${name}</string>
             </dict>
         </dict>
     </array>
 </dict>
 </plist>`;
-
-    // Tell the iPhone this is an official Apple XML file
     res.set('Content-Type', 'text/xml');
     res.send(plistXml);
 });
 
 // ==========================================
-// 6. START SERVER
+// 🚀 6. NEW: APP MANAGER & STORE DESIGNER API
+// ==========================================
+// This single route handles everything your HTML files ask for.
+app.post('/store-api', async (req, res) => {
+    try {
+        await client.connect();
+        const db = client.db("KurdeStore");
+        const appsCollection = db.collection("Apps");
+        
+        // Ensure body is parsed (in case fetch sends stringified JSON)
+        let body = req.body;
+        if (typeof body === 'string') body = JSON.parse(body);
+        
+        const action = body.action;
+
+        if (action === "list_apps") {
+            // Returns both Store Config and all Apps/Games
+            const items = await appsCollection.find({}).toArray();
+            return res.json(items);
+        }
+        
+        if (action === "save_item") {
+            // Handles BOTH the Designer Config update AND App Uploads
+            const appId = body.appId || body.bundleId;
+            if (!appId) return res.status(400).json({ error: "Missing App ID or Bundle ID" });
+            
+            // Remove the action from the payload before saving
+            delete body.action;
+            
+            await appsCollection.updateOne(
+                { appId: appId },
+                { $set: body },
+                { upsert: true }
+            );
+            return res.json({ success: true, message: "Saved successfully" });
+        }
+
+        if (action === "delete_app") {
+            const bundleId = body.bundleId;
+            await appsCollection.deleteOne({ appId: bundleId });
+            return res.json({ success: true, message: "App deleted" });
+        }
+
+        // --- S3 UPLOAD URL GENERATOR ---
+        if (action === "get_url") {
+            // NOTE: You are still using S3 here. 
+            // In the future, if you switch to DigitalOcean Spaces, you update this logic!
+            return res.json({ 
+                error: "S3 Direct Upload is disabled on the DigitalOcean backend. Please manually upload the IPA to Spaces and paste the URL in the code."
+            });
+        }
+
+        res.status(400).json({ error: "Unknown action" });
+
+    } catch (e) {
+        console.error("Store API Error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// ==========================================
+// 7. START SERVER
 // ==========================================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
