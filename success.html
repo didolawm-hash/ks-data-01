@@ -101,7 +101,7 @@
             udidDiv.innerHTML = "<strong>Device UDID:</strong><br>" + udid;
 
             try {
-                const response = await fetch(`${BACKEND_API}?udid=${udid}&t=${Date.now()}`);
+                const response = await fetch(`${BACKEND_API}/status?udid=${udid}&t=${Date.now()}`);
                 const data = await response.json();
 
                 if (data.isPaid === true || String(data.isPaid).toLowerCase() === "true") {
