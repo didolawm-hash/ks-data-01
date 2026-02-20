@@ -6,7 +6,7 @@ const AWS = require('aws-sdk');
 
 const app = express();
 
-// 🚨 Middleware setup - JSON MUST BE FIRST
+// 🚨 JSON MUST BE FIRST
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -16,7 +16,7 @@ const uri = process.env.DATABASE_URL;
 const client = new MongoClient(uri);
 
 // ==========================================
-// 🚀 DIGITALOCEAN SPACES & CDN CONFIG
+// 🚀 DIGITALOCEAN SPACES CONFIG
 // ==========================================
 const s3 = new AWS.S3({
     endpoint: 'lon1.digitaloceanspaces.com',
@@ -27,11 +27,10 @@ const s3 = new AWS.S3({
 });
 
 const SPACES_BUCKET = 'my-app-store';
-// ✅ Updated to use the CDN endpoint for high-speed public access
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
-// 1. HTML PAGE ROUTES
+// 1. PAGE ROUTES
 // ==========================================
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
@@ -48,50 +47,27 @@ app.post('/', async (req, res) => {
         const body = req.body;
         const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
         const udid = udidMatch ? udidMatch[1] : null;
-
         if (!udid) return res.status(400).send("UDID not found");
 
         await client.connect();
         const db = client.db("KurdeStore");
-        const users = db.collection("kurdestore_users");
-
-        await users.updateOne(
+        await db.collection("kurdestore_users").updateOne(
             { udid: udid },
             { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
             { upsert: true }
         );
-
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
-    } catch (e) {
-        res.status(500).send("Internal Server Error: " + e.message);
-    }
+    } catch (e) { res.status(500).send(e.message); }
 });
 
 // ==========================================
 // 3. STORE & ADMIN API
 // ==========================================
-app.get('/status', async (req, res) => {
-    const { udid } = req.query;
-    try {
-        await client.connect();
-        const user = await client.db("KurdeStore").collection("kurdestore_users").findOne({ udid: udid });
-        res.json(user || { isPaid: false, not_found: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
         res.json(apps);
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-app.get('/api/users', async (req, res) => {
-    try {
-        await client.connect();
-        const users = await client.db("KurdeStore").collection("kurdestore_users").find({}).sort({reg_date: -1}).toArray();
-        res.json(users);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -104,18 +80,8 @@ app.post('/api/update-status', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/bypass-time', async (req, res) => {
-    const { udid } = req.body;
-    try {
-        await client.connect();
-        const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { reg_date: pastDate } });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // ==========================================
-// 🚀 4. APP MANAGER API (Store API)
+// 🚀 4. THE UPLOAD & DATA LOGIC
 // ==========================================
 app.post('/store-api', async (req, res) => {
     try {
@@ -136,7 +102,6 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🛠️ DATA NORMALIZER: Maps 'subtitle' to 'info' so Flutter shows it
             const finalData = {
                 ...body,
                 appId: appId,
@@ -155,32 +120,25 @@ app.post('/store-api', async (req, res) => {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
+            // 🚨 REMOVED ACL TO PREVENT STUCK BAR
             const params = {
                 Bucket: SPACES_BUCKET,
                 Key: key,
                 Expires: 600,
-                ContentType: contentType,
-                ACL: 'public-read' // 🔓 Automatically makes files public for install
+                ContentType: contentType
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
-
-        if (action === "delete_app") {
-            await appsCollection.deleteOne({ appId: body.bundleId });
-            return res.json({ success: true });
-        }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
-// 5. OTA PLIST GENERATOR
+// 5. PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
     const { ipaUrl, bundleId, name } = req.query;
-    if (!ipaUrl || !bundleId) return res.status(400).send("Missing parameters");
-
     const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipaUrl}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
