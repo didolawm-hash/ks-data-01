@@ -39,6 +39,11 @@ app.get('/store.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'store.html'));
 });
 
+// 👑 Your Secret Admin Page
+app.get('/soze7919018030dido.html', (req, res) => {
+    res.sendFile(path.join(__dirname, 'soze7919018030dido.html'));
+});
+
 
 // ==========================================
 // 2. APPLE UDID ENROLLMENT
@@ -107,8 +112,43 @@ app.get('/get-apps', async (req, res) => {
     }
 });
 
+
 // ==========================================
-// 4. START SERVER
+// 4. ADMIN PANEL ROUTES
+// ==========================================
+
+// Get the list of all registered users
+app.get('/api/users', async (req, res) => {
+    try {
+        await client.connect();
+        const db = client.db("KurdeStore");
+        // Sorts by newest first
+        const users = await db.collection("kurdestore_users").find({}).sort({reg_date: -1}).toArray();
+        res.json(users);
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+// Update a user's payment status (Approve/Revoke)
+app.post('/api/update-status', async (req, res) => {
+    const { udid, isPaid } = req.body;
+    try {
+        await client.connect();
+        const db = client.db("KurdeStore");
+        await db.collection("kurdestore_users").updateOne(
+            { udid: udid },
+            { $set: { isPaid: isPaid } }
+        );
+        res.json({ success: true, message: `UDID ${udid} updated to Paid: ${isPaid}` });
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
+});
+
+
+// ==========================================
+// 5. START SERVER
 // ==========================================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
