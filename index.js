@@ -5,8 +5,6 @@ const path = require('path');
 const AWS = require('aws-sdk');
 
 const app = express();
-
-// 🚨 JSON MUST BE FIRST
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -25,7 +23,6 @@ const s3 = new AWS.S3({
     region: 'lon1',
     signatureVersion: 'v4'
 });
-
 const SPACES_BUCKET = 'my-app-store';
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
@@ -40,7 +37,7 @@ app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.ht
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
-// 2. APPLE UDID ENROLLMENT
+// 2. UDID & STATUS
 // ==========================================
 app.post('/', async (req, res) => {
     try {
@@ -48,10 +45,8 @@ app.post('/', async (req, res) => {
         const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
         const udid = udidMatch ? udidMatch[1] : null;
         if (!udid) return res.status(400).send("UDID not found");
-
         await client.connect();
-        const db = client.db("KurdeStore");
-        await db.collection("kurdestore_users").updateOne(
+        await client.db("KurdeStore").collection("kurdestore_users").updateOne(
             { udid: udid },
             { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
             { upsert: true }
@@ -60,9 +55,6 @@ app.post('/', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// ==========================================
-// 3. STORE & ADMIN API
-// ==========================================
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
@@ -71,17 +63,8 @@ app.get('/get-apps', async (req, res) => {
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/update-status', async (req, res) => {
-    const { udid, isPaid } = req.body;
-    try {
-        await client.connect();
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
 // ==========================================
-// 🚀 4. THE UPLOAD & DATA LOGIC
+// 🚀 3. THE APP MANAGER API (CLEANUP ADDED)
 // ==========================================
 app.post('/store-api', async (req, res) => {
     try {
@@ -120,28 +103,52 @@ app.post('/store-api', async (req, res) => {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            // 🚨 REMOVED ACL TO PREVENT STUCK BAR
+            // 🔓 RE-ADDING ACL BUT WITH SIGNATURE FIX
             const params = {
                 Bucket: SPACES_BUCKET,
                 Key: key,
                 Expires: 600,
-                ContentType: contentType
+                ContentType: contentType,
+                ACL: 'public-read' 
             };
 
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
+
+        // 🗑️ NEW: DELETE APP AND FILES FROM STORAGE
+        if (action === "delete_app") {
+            const bundleId = body.bundleId;
+            const appData = await appsCollection.findOne({ appId: bundleId });
+
+            if (appData) {
+                // Delete Icon from Spaces
+                if (appData.iconKey) {
+                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
+                }
+                // Delete IPA from Spaces
+                if (appData.ipaKey) {
+                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
+                }
+            }
+
+            await appsCollection.deleteOne({ appId: bundleId });
+            return res.json({ success: true, message: "App and files deleted" });
+        }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
-// 5. PLIST GENERATOR
+// 4. PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
-    const { ipaUrl, bundleId, name } = req.query;
+    let { ipaUrl, bundleId, name } = req.query;
+    if (ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
+        ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
+    }
     const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string>${ipaUrl}</string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
+<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${ipaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
     res.set('Content-Type', 'text/xml');
     res.send(plistXml);
 });
