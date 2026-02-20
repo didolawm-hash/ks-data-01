@@ -5,8 +5,6 @@ const path = require('path');
 const AWS = require('aws-sdk');
 
 const app = express();
-
-// 🚨 Middleware setup
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -16,18 +14,18 @@ const uri = process.env.DATABASE_URL;
 const client = new MongoClient(uri);
 
 // ==========================================
-// 🚀 DIGITALOCEAN SPACES & CDN CONFIG
+// 🚀 DIGITALOCEAN SPACES CONFIG
 // ==========================================
 const s3 = new AWS.S3({
     endpoint: 'lon1.digitaloceanspaces.com',
     accessKeyId: 'DO00D6GRP9K2RAE873PZ',
     secretAccessKey: 'e4+QnmDLY1WkeWEsSjs260HVUXK1ShUqrrrYYmZ2PRU',
     region: 'lon1',
-    signatureVersion: 'v4' // CRITICAL: Required for lon1 region
+    signatureVersion: 'v4'
 });
-
 const SPACES_BUCKET = 'my-app-store';
-// ✅ Use the EXACT CDN URL from your DigitalOcean settings
+
+// ✅ This is your PUBLIC CDN link. iOS needs this to install apps!
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
@@ -41,7 +39,7 @@ app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.ht
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
-// 2. UDID & STATUS API
+// 2. UDID & STATUS
 // ==========================================
 app.post('/', async (req, res) => {
     try {
@@ -68,7 +66,7 @@ app.get('/get-apps', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 3. THE APP MANAGER API (CLEANUP & CDN FIX)
+// 🚀 3. THE APP MANAGER API (CLEANUP & PUBLIC FIX)
 // ==========================================
 app.post('/store-api', async (req, res) => {
     try {
@@ -89,7 +87,7 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🛠️ DATA NORMALIZER: Forces links to use CDN for Apple compatibility
+            // 🛠️ DATA NORMALIZER: Forces the use of the PUBLIC CDN URL
             const finalData = {
                 ...body,
                 appId: appId,
@@ -108,7 +106,8 @@ app.post('/store-api', async (req, res) => {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            // 🚨 NO ACL HERE: This stops the bar from getting stuck
+            // 🔓 Use putObject WITHOUT ACL to avoid the stuck bar. 
+            // We rely on the Space being set to Public File Listing.
             const params = {
                 Bucket: SPACES_BUCKET,
                 Key: key,
@@ -123,10 +122,13 @@ app.post('/store-api', async (req, res) => {
         if (action === "delete_app") {
             const bundleId = body.bundleId;
             const appData = await appsCollection.findOne({ appId: bundleId });
+
             if (appData) {
+                // Delete Icon and IPA from Storage automatically
                 if (appData.iconKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
                 if (appData.ipaKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
             }
+
             await appsCollection.deleteOne({ appId: bundleId });
             return res.json({ success: true });
         }
@@ -134,12 +136,12 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 4. OTA PLIST GENERATOR (CRITICAL FIX)
+// 4. PLIST GENERATOR (CRITICAL FOR INSTALLS)
 // ==========================================
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
     
-    // Safety check for URL formatting
+    // Force CDN link in the Plist so Apple can download it
     if (ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
