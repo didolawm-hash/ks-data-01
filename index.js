@@ -2,12 +2,13 @@ const express = require('express');
 const { MongoClient } = require('mongodb');
 const cors = require('cors');
 const path = require('path');
+const AWS = require('aws-sdk');
 
 const app = express();
 
-// 🚨 CRITICAL FIX: JSON MUST BE FIRST!
+// 🚨 JSON MUST BE FIRST for Admin Panel compatibility
 app.use(express.json()); 
-// Then use text parser for Apple's XML
+// Text parser catches Apple's XML profile data
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
 
@@ -18,26 +19,26 @@ const uri = process.env.DATABASE_URL;
 const client = new MongoClient(uri);
 
 // ==========================================
-// 1. EXPLICIT HTML PAGE ROUTES
+// 🚀 DIGITALOCEAN SPACES CONFIG
 // ==========================================
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+const s3 = new AWS.S3({
+    endpoint: 'lon1.digitaloceanspaces.com',
+    accessKeyId: 'DO00D6GRP9K2RAE873PZ',
+    secretAccessKey: 'e4+QnmDLY1WkeWEsSjs260HVUXK1ShUqrrrYYmZ2PRU',
+    region: 'lon1',
+    signatureVersion: 'v4'
 });
-app.get('/success.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'success.html'));
-});
-app.get('/rawakurdestore1664.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'rawakurdestore1664.html'));
-});
-app.get('/store-designer.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'store-designer.html'));
-});
-app.get('/store.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'store.html'));
-});
-app.get('/soze7919018030dido.html', (req, res) => {
-    res.sendFile(path.join(__dirname, 'soze7919018030dido.html'));
-});
+const SPACES_BUCKET = 'my-app-store';
+
+// ==========================================
+// 1. HTML PAGE ROUTES
+// ==========================================
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
+app.get('/rawakurdestore1664.html', (req, res) => res.sendFile(path.join(__dirname, 'rawakurdestore1664.html')));
+app.get('/store-designer.html', (req, res) => res.sendFile(path.join(__dirname, 'store-designer.html')));
+app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.html')));
+app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
 // 2. APPLE UDID ENROLLMENT
@@ -69,7 +70,7 @@ app.post('/', async (req, res) => {
 });
 
 // ==========================================
-// 3. API ROUTES (Status & App List)
+// 3. CORE API ROUTES (Status & App List)
 // ==========================================
 app.get('/status', async (req, res) => {
     const { udid } = req.query;
@@ -130,7 +131,7 @@ app.post('/api/bypass-time', async (req, res) => {
 });
 
 // ==========================================
-// 5. OTA APP INSTALLATION (The Missing Plist)
+// 5. OTA PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
     const { ipaUrl, bundleId, name } = req.query;
@@ -163,33 +164,28 @@ app.get('/plist', (req, res) => {
 });
 
 // ==========================================
-// 🚀 6. NEW: APP MANAGER & STORE DESIGNER API
+// 🚀 6. APP MANAGER & STORE DESIGNER API
 // ==========================================
-// This single route handles everything your HTML files ask for.
 app.post('/store-api', async (req, res) => {
     try {
         await client.connect();
         const db = client.db("KurdeStore");
         const appsCollection = db.collection("Apps");
         
-        // Ensure body is parsed (in case fetch sends stringified JSON)
         let body = req.body;
         if (typeof body === 'string') body = JSON.parse(body);
         
         const action = body.action;
 
         if (action === "list_apps") {
-            // Returns both Store Config and all Apps/Games
             const items = await appsCollection.find({}).toArray();
             return res.json(items);
         }
         
         if (action === "save_item") {
-            // Handles BOTH the Designer Config update AND App Uploads
             const appId = body.appId || body.bundleId;
-            if (!appId) return res.status(400).json({ error: "Missing App ID or Bundle ID" });
+            if (!appId) return res.status(400).json({ error: "Missing App ID" });
             
-            // Remove the action from the payload before saving
             delete body.action;
             
             await appsCollection.updateOne(
@@ -197,28 +193,35 @@ app.post('/store-api', async (req, res) => {
                 { $set: body },
                 { upsert: true }
             );
-            return res.json({ success: true, message: "Saved successfully" });
+            return res.json({ success: true });
         }
 
         if (action === "delete_app") {
             const bundleId = body.bundleId;
             await appsCollection.deleteOne({ appId: bundleId });
-            return res.json({ success: true, message: "App deleted" });
+            return res.json({ success: true });
         }
 
-        // --- S3 UPLOAD URL GENERATOR ---
+        // 🚀 DIGITALOCEAN SIGNED URL GENERATOR
         if (action === "get_url") {
-            // NOTE: You are still using S3 here. 
-            // In the future, if you switch to DigitalOcean Spaces, you update this logic!
-            return res.json({ 
-                error: "S3 Direct Upload is disabled on the DigitalOcean backend. Please manually upload the IPA to Spaces and paste the URL in the code."
-            });
+            const { fileName, fileType, contentType } = body;
+            const cleanName = fileName.replace(/[^a-zA-Z0-9.\-_]/g, '');
+            const key = `${fileType}/${Date.now()}-${cleanName}`;
+            
+            const params = {
+                Bucket: SPACES_BUCKET,
+                Key: key,
+                Expires: 600,
+                ContentType: contentType,
+                ACL: 'public-read'
+            };
+
+            const uploadUrl = s3.getSignedUrl('putObject', params);
+            return res.json({ uploadUrl, key });
         }
 
         res.status(400).json({ error: "Unknown action" });
-
     } catch (e) {
-        console.error("Store API Error:", e);
         res.status(500).json({ error: e.message });
     }
 });
