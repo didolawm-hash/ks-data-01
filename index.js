@@ -153,7 +153,54 @@ app.post('/api/bypass-time', async (req, res) => {
 });
 
 // ==========================================
-// 5. START SERVER
+// 5. OTA APP INSTALLATION (The Missing Plist)
+// ==========================================
+app.get('/plist', (req, res) => {
+    const { ipaUrl, bundleId, name } = req.query;
+
+    if (!ipaUrl || !bundleId || !name) {
+        return res.status(400).send("Missing parameters");
+    }
+
+    const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>items</key>
+    <array>
+        <dict>
+            <key>assets</key>
+            <array>
+                <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>${ipaUrl}</string>
+                </dict>
+            </array>
+            <key>metadata</key>
+            <dict>
+                <key>bundle-identifier</key>
+                <string>${bundleId}</string>
+                <key>bundle-version</key>
+                <string>1.0</string>
+                <key>kind</key>
+                <string>software</string>
+                <key>title</key>
+                <string>${name}</string>
+            </dict>
+        </dict>
+    </array>
+</dict>
+</plist>`;
+
+    // Tell the iPhone this is an official Apple XML file
+    res.set('Content-Type', 'text/xml');
+    res.send(plistXml);
+});
+
+// ==========================================
+// 6. START SERVER
 // ==========================================
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
