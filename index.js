@@ -6,7 +6,7 @@ const AWS = require('aws-sdk');
 
 const app = express();
 
-// 🚨 Middleware setup - JSON MUST BE FIRST
+// 🚨 Middleware setup
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
 app.use(cors());
@@ -23,11 +23,11 @@ const s3 = new AWS.S3({
     accessKeyId: 'DO00D6GRP9K2RAE873PZ',
     secretAccessKey: 'e4+QnmDLY1WkeWEsSjs260HVUXK1ShUqrrrYYmZ2PRU',
     region: 'lon1',
-    signatureVersion: 'v4' // Required for lon1 region
+    signatureVersion: 'v4' // CRITICAL: Required for lon1 region
 });
 
 const SPACES_BUCKET = 'my-app-store';
-// ✅ High-speed CDN endpoint for icons and app installs
+// ✅ Use the EXACT CDN URL from your DigitalOcean settings
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
@@ -68,7 +68,7 @@ app.get('/get-apps', async (req, res) => {
 });
 
 // ==========================================
-// 🚀 3. APP MANAGER API (WITH AUTO-CLEANUP)
+// 🚀 3. THE APP MANAGER API (CLEANUP & CDN FIX)
 // ==========================================
 app.post('/store-api', async (req, res) => {
     try {
@@ -89,6 +89,7 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
+            // 🛠️ DATA NORMALIZER: Forces links to use CDN for Apple compatibility
             const finalData = {
                 ...body,
                 appId: appId,
@@ -107,7 +108,7 @@ app.post('/store-api', async (req, res) => {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            // 🚨 REMOVED ACL: This stops the bar from getting stuck at 0%
+            // 🚨 NO ACL HERE: This stops the bar from getting stuck
             const params = {
                 Bucket: SPACES_BUCKET,
                 Key: key,
@@ -119,7 +120,6 @@ app.post('/store-api', async (req, res) => {
             return res.json({ uploadUrl, key });
         }
 
-        // 🗑️ DELETE APP AND REMOVE FILES FROM STORAGE
         if (action === "delete_app") {
             const bundleId = body.bundleId;
             const appData = await appsCollection.findOne({ appId: bundleId });
@@ -134,13 +134,16 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 4. OTA PLIST GENERATOR
+// 4. OTA PLIST GENERATOR (CRITICAL FIX)
 // ==========================================
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
+    
+    // Safety check for URL formatting
     if (ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
+
     const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${ipaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
