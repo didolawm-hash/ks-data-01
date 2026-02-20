@@ -5,9 +5,10 @@ const path = require('path');
 
 const app = express();
 
-// Use a more flexible body parser for Apple's XML
+// 🚨 CRITICAL FIX: JSON MUST BE FIRST!
+app.use(express.json()); 
+// Then use text parser for Apple's XML
 app.use(express.text({ type: '*/*' })); 
-app.use(express.json());
 app.use(cors());
 
 // Serve static assets (images, css, etc.)
@@ -44,7 +45,6 @@ app.get('/soze7919018030dido.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'soze7919018030dido.html'));
 });
 
-
 // ==========================================
 // 2. APPLE UDID ENROLLMENT
 // ==========================================
@@ -52,38 +52,30 @@ app.post('/', async (req, res) => {
     console.log("Enrollment request received from iPhone");
     try {
         const body = req.body;
-        // Extract UDID from the XML
         const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
         const udid = udidMatch ? udidMatch[1] : null;
 
         if (!udid) {
-            console.error("UDID not found in body");
             return res.status(400).send("UDID not found");
         }
 
-        // Connect only if not already connected
         await client.connect();
         const db = client.db("KurdeStore");
         const users = db.collection("kurdestore_users");
 
-        // Save the user
         await users.updateOne(
             { udid: udid },
             { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
             { upsert: true }
         );
 
-        console.log(`Success! UDID ${udid} saved to MongoDB.`);
-        
-        // 301 Redirect to success page
+        console.log(`Success! UDID ${udid} saved.`);
         return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
 
     } catch (e) {
-        console.error("Enrollment Error:", e.message);
         res.status(500).send("Internal Server Error: " + e.message);
     }
 });
-
 
 // ==========================================
 // 3. API ROUTES (Status & App List)
@@ -100,7 +92,6 @@ app.get('/status', async (req, res) => {
     }
 });
 
-// This is required for your store to actually list the apps
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
@@ -112,17 +103,13 @@ app.get('/get-apps', async (req, res) => {
     }
 });
 
-
 // ==========================================
 // 4. ADMIN PANEL ROUTES
 // ==========================================
-
-// Get the list of all registered users
 app.get('/api/users', async (req, res) => {
     try {
         await client.connect();
         const db = client.db("KurdeStore");
-        // Sorts by newest first
         const users = await db.collection("kurdestore_users").find({}).sort({reg_date: -1}).toArray();
         res.json(users);
     } catch (e) { 
@@ -130,7 +117,6 @@ app.get('/api/users', async (req, res) => {
     }
 });
 
-// Update a user's payment status (Approve/Revoke)
 app.post('/api/update-status', async (req, res) => {
     const { udid, isPaid } = req.body;
     try {
@@ -140,12 +126,31 @@ app.post('/api/update-status', async (req, res) => {
             { udid: udid },
             { $set: { isPaid: isPaid } }
         );
-        res.json({ success: true, message: `UDID ${udid} updated to Paid: ${isPaid}` });
+        res.json({ success: true, message: `Updated to Paid: ${isPaid}` });
     } catch (e) { 
         res.status(500).json({ error: e.message }); 
     }
 });
 
+// 🚀 NEW: Timer Bypass Route
+app.post('/api/bypass-time', async (req, res) => {
+    const { udid } = req.body;
+    try {
+        await client.connect();
+        const db = client.db("KurdeStore");
+        
+        // Subtract 73 hours from the current time
+        const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
+
+        await db.collection("kurdestore_users").updateOne(
+            { udid: udid },
+            { $set: { reg_date: pastDate } }
+        );
+        res.json({ success: true, message: `Timer bypassed` });
+    } catch (e) { 
+        res.status(500).json({ error: e.message }); 
+    }
+});
 
 // ==========================================
 // 5. START SERVER
