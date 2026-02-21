@@ -329,9 +329,10 @@ async function reSignAllApps() {
                 });
 
                 // B. Clean IPA (Strip problematic plugins/folders)
-                console.log(`🧹 Cleaning ${app.name}...`);
+                console.log(`🧹 Deep Cleaning ${app.name}...`);
                 await new Promise((resolve) => {
-                    exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`, () => resolve());
+                    const deepCleanCmd = `zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata"`;
+    exec(deepCleanCmd, () => resolve())
                 });
 
                 // C. Sign using Spawn (Handles large games like Subway Surfers better)
