@@ -5,6 +5,7 @@ const path = require('path');
 const AWS = require('aws-sdk');
 const { AppStoreConnect, Token } = require('appstore-connect-sdk');
 const fs = require('fs');
+const { exec } = require('child_process');
 
 const appleConfig = {
     issuerId: 'cbb536cc-f3f9-4ce6-a9d6-f5cb45012a25',
@@ -76,6 +77,7 @@ app.get('/api/apple-usage', async (req, res) => {
         });
     } catch (e) { res.status(500).send(e.message); }
 });
+
 // ==========================================
 // 👥 3. USER MANAGEMENT API (RESTORED!)
 // ==========================================
@@ -230,6 +232,95 @@ app.get('/plist', (req, res) => {
     res.set('Content-Type', 'text/xml');
     res.send(plistXml);
 });
+
+// ==========================================
+// 🛠️ 6. BULK RE-SIGNER CONFIG (Every 10 Mins)
+// ==========================================
+const P12_PATH = path.join(__dirname, 'final.p12');
+const P12_PASS = '1212';
+const PROVISION_PATH = path.join(__dirname, 'latest.mobileprovision');
+
+async function updateProvisioningProfile() {
+    try {
+        const token = new Token(appleConfig.keyId, appleConfig.issuerId, appleConfig.privateKey);
+        const api = new AppStoreConnect(token);
+        
+        const profiles = await api.profiles.list();
+        if (!profiles || !profiles.data || profiles.data.length === 0) {
+            throw new Error("No profiles found on Apple account");
+        }
+        
+        const profileContent = profiles.data[0].attributes.profileContent; 
+        fs.writeFileSync(PROVISION_PATH, Buffer.from(profileContent, 'base64'));
+        console.log("✅ Latest .mobileprovision downloaded from Apple");
+    } catch (e) {
+        console.error("❌ Failed to get profile from Apple:", e.message);
+        throw e; 
+    }
+}
+
+
+
+async function reSignAllApps() {
+    console.log("🔄 Starting 10-minute Bulk Re-Sign process...");
+    
+    try {
+        await updateProvisioningProfile();
+        await client.connect();
+        const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
+
+        for (let app of apps) {
+            if (!app.ipaKey || app.appId === "store_config_v1" || app.isGame === "config") continue;
+
+            const safeIpaKey = app.ipaKey.startsWith('/') ? app.ipaKey.substring(1) : app.ipaKey;
+            const tempInput = path.join(__dirname, `temp_in_${app.bundleId}.ipa`);
+            const tempOutput = path.join(__dirname, `temp_out_${app.bundleId}.ipa`);
+
+            console.log(`📦 Processing: ${app.name}`);
+
+            try {
+                const data = await s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).promise();
+                fs.writeFileSync(tempInput, data.Body);
+
+                const signCmd = `./zsign -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
+                
+                await new Promise((resolve, reject) => {
+                    exec(signCmd, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error(`❌ Failed to sign ${app.name}:`, err.message);
+                            return resolve(); 
+                        }
+                        console.log(`✅ Signed ${app.name}`);
+                        resolve();
+                    });
+                });
+
+                if (fs.existsSync(tempOutput)) {
+                    const signedData = fs.readFileSync(tempOutput);
+                    await s3.putObject({
+                        Bucket: SPACES_BUCKET,
+                        Key: safeIpaKey,
+                        Body: signedData,
+                        ACL: 'public-read',
+                        ContentType: 'application/octet-stream'
+                    }).promise();
+                    console.log(`☁️ Uploaded signed ${app.name} to Spaces`);
+                }
+            } catch (innerErr) {
+                console.error(`❌ Error processing ${app.name}:`, innerErr.message);
+            } finally {
+                if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
+                if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+            }
+        }
+        console.log("✨ All apps re-signed and uploaded successfully!");
+    } catch (e) {
+        console.error("❌ Bulk Sign Error:", e.message);
+    }
+}
+
+// 🚀 SET THE TIMER (Runs every 10 minutes)
+setInterval(reSignAllApps, 10 * 60 * 1000);
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
