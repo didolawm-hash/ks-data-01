@@ -302,7 +302,7 @@ async function updateProvisioningProfile() {
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign process (Memory-Safe Mode)...");
+    console.log("🔄 Starting Bulk Re-Sign process (EXTREME Memory-Safe Mode)...");
     try {
         await updateProvisioningProfile();
         await client.connect();
@@ -318,12 +318,15 @@ async function reSignAllApps() {
             console.log(`📦 Processing: ${app.name}`);
 
             try {
-                // A. Download - Use a stream to save memory
-                const data = await s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).promise();
-                fs.writeFileSync(tempInput, data.Body);
+                // ✨ FIX: STREAM DOWNLOAD DIRECTLY TO DISK (Zero RAM usage)
+                const downloadStream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
+                const fileWriter = fs.createWriteStream(tempInput);
                 
-                // Clear the body from memory immediately
-                data.Body = null; 
+                await new Promise((resolve, reject) => {
+                    downloadStream.pipe(fileWriter);
+                    fileWriter.on('finish', resolve);
+                    fileWriter.on('error', reject);
+                });
 
                 // B. Run zsign
                 const signCmd = `./zsign -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
@@ -335,13 +338,13 @@ async function reSignAllApps() {
                     });
                 });
 
-                // C. Upload - Use a ReadStream to avoid loading the whole file into RAM
+                // C. Upload using stream
                 if (fs.existsSync(tempOutput)) {
-                    const fileStream = fs.createReadStream(tempOutput);
+                    const uploadStream = fs.createReadStream(tempOutput);
                     await s3.putObject({
                         Bucket: SPACES_BUCKET, 
                         Key: safeIpaKey, 
-                        Body: fileStream, // ✨ STREAMING: This uses almost zero RAM
+                        Body: uploadStream, 
                         ACL: 'public-read', 
                         ContentType: 'application/octet-stream'
                     }).promise();
@@ -350,12 +353,11 @@ async function reSignAllApps() {
             } catch (err) { 
                 console.error(`❌ Error ${app.name}:`, err.message); 
             } finally {
-                // Cleanup files immediately
                 if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
                 if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
-                
-                // 🧠 MEMORY MANAGEMENT: Give the server a 2-second break between apps
-                await new Promise(r => setTimeout(r, 2000));
+                // 🧠 Deep memory clear
+                if (global.gc) global.gc();
+                await new Promise(r => setTimeout(r, 5000)); // 5 second break
             }
         }
         console.log("✨ All apps updated successfully!");
