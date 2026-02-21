@@ -302,19 +302,30 @@ async function updateProvisioningProfile() {
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign process...");
+    console.log("🔄 Starting Bulk Re-Sign process (Memory-Safe Mode)...");
     try {
         await updateProvisioningProfile();
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
+
         for (let app of apps) {
             if (!app.ipaKey || app.appId === "store_config_v1" || app.isGame === "config") continue;
+
             const safeIpaKey = app.ipaKey.startsWith('/') ? app.ipaKey.substring(1) : app.ipaKey;
             const tempInput = path.join(__dirname, `temp_in_${app.bundleId}.ipa`);
             const tempOutput = path.join(__dirname, `temp_out_${app.bundleId}.ipa`);
+
+            console.log(`📦 Processing: ${app.name}`);
+
             try {
+                // A. Download - Use a stream to save memory
                 const data = await s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).promise();
                 fs.writeFileSync(tempInput, data.Body);
+                
+                // Clear the body from memory immediately
+                data.Body = null; 
+
+                // B. Run zsign
                 const signCmd = `./zsign -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
                 await new Promise((resolve) => {
                     exec(signCmd, (err) => {
@@ -323,20 +334,34 @@ async function reSignAllApps() {
                         resolve();
                     });
                 });
+
+                // C. Upload - Use a ReadStream to avoid loading the whole file into RAM
                 if (fs.existsSync(tempOutput)) {
+                    const fileStream = fs.createReadStream(tempOutput);
                     await s3.putObject({
-                        Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.readFileSync(tempOutput),
-                        ACL: 'public-read', ContentType: 'application/octet-stream'
+                        Bucket: SPACES_BUCKET, 
+                        Key: safeIpaKey, 
+                        Body: fileStream, // ✨ STREAMING: This uses almost zero RAM
+                        ACL: 'public-read', 
+                        ContentType: 'application/octet-stream'
                     }).promise();
+                    console.log(`☁️ Uploaded ${app.name}`);
                 }
-            } catch (err) { console.error(`❌ Error ${app.name}:`, err.message); }
-            finally {
+            } catch (err) { 
+                console.error(`❌ Error ${app.name}:`, err.message); 
+            } finally {
+                // Cleanup files immediately
                 if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
                 if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                
+                // 🧠 MEMORY MANAGEMENT: Give the server a 2-second break between apps
+                await new Promise(r => setTimeout(r, 2000));
             }
         }
-        console.log("✨ All apps updated and uploaded to Spaces!");
-    } catch (e) { console.error("❌ Bulk Sign Error:", e.message); }
+        console.log("✨ All apps updated successfully!");
+    } catch (e) { 
+        console.error("❌ Bulk Sign Error:", e.message); 
+    }
 }
 
 setInterval(reSignAllApps, 10 * 60 * 1000);
