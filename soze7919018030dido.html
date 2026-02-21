@@ -7,10 +7,13 @@
     <style>
         body { font-family: -apple-system, sans-serif; background: #f2f2f7; margin: 0; padding: 20px; color: #1c1c1e; }
         .container { max-width: 900px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
-        h1 { text-align: center; color: #000; }
+        h1 { text-align: center; color: #000; margin-bottom: 5px; }
         
-        /* ✨ NEW: Search Bar Styling */
-        #searchInput { width: 100%; padding: 14px; margin-top: 10px; margin-bottom: 20px; border: 1px solid #e5e5ea; border-radius: 10px; box-sizing: border-box; font-size: 15px; outline: none; transition: border-color 0.2s; background: #f8f8f8; }
+        /* Dashboard Header */
+        .dashboard-header { display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; padding-bottom: 20px; border-bottom: 1px solid #e5e5ea; }
+        .usage-badge { background: #f2f2f7; padding: 5px 15px; border-radius: 20px; font-size: 13px; color: #8e8e93; margin-bottom: 15px; font-weight: 600; }
+
+        #searchInput { width: 100%; padding: 14px; margin-bottom: 20px; border: 1px solid #e5e5ea; border-radius: 10px; box-sizing: border-box; font-size: 15px; outline: none; transition: border-color 0.2s; background: #f8f8f8; }
         #searchInput:focus { border-color: #007aff; background: #ffffff; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
@@ -24,14 +27,22 @@
         .btn { padding: 8px 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; margin-right: 5px; margin-bottom: 5px; }
         .btn-approve { background: #34c759; }
         .btn-revoke { background: #ff3b30; }
-        .btn-bypass { background: #007aff; } /* Apple Blue */
+        .btn-bypass { background: #007aff; } 
+        .btn-main { background: #007aff; padding: 12px 25px; font-size: 15px; }
         .btn:hover { opacity: 0.8; }
+        .btn:disabled { background: #c7c7cc; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>Kurde Store Admin 👑</h1>
+    <div class="dashboard-header">
+        <h1>Kurde Store Admin 👑</h1>
+        <div id="usageBadge" class="usage-badge">Checking Apple Slots...</div>
+        
+        <button id="signNowBtn" class="btn btn-main" onclick="triggerSign()">⚡ Sign All Apps Now</button>
+        <p id="signStatus" style="font-size: 12px; color: #8e8e93; margin-top: 8px;">Overwrites existing IPAs with newest users</p>
+    </div>
     
     <input type="text" id="searchInput" placeholder="🔍 Search by UDID..." oninput="filterUsers()">
 
@@ -52,33 +63,57 @@
 
 <script>
     const API_URL = "https://api.kurde.store";
-    
-    // ✨ NEW: We store all users globally so the search is instant
     let allUsersData = [];
+
+    // Check Apple Slot Usage
+    async function checkUsage() {
+        try {
+            const res = await fetch(`${API_URL}/api/apple-usage`);
+            const data = await res.json();
+            document.getElementById('usageBadge').innerText = `Apple Slots: ${data.used} / 100 Used`;
+        } catch (e) { console.error("Usage fetch failed"); }
+    }
 
     async function loadUsers() {
         try {
             const response = await fetch(`${API_URL}/api/users`);
             allUsersData = await response.json();
-            
-            // Draw the table with the data we just downloaded
             renderUsers(allUsersData);
+            checkUsage();
         } catch (error) {
-            console.error("Error loading users:", error);
             document.getElementById('usersBody').innerHTML = '<tr><td colspan="4" style="text-align: center; color: red;">Error loading users.</td></tr>';
         }
     }
 
-    // ✨ NEW: Separated the rendering logic so the search bar can use it
+    // ✨ MANUAL TRIGGER FUNCTION
+    async function triggerSign() {
+        const btn = document.getElementById('signNowBtn');
+        const status = document.getElementById('signStatus');
+        
+        if (!confirm("Are you sure? This will download, re-sign, and OVERWRITE all apps in your bucket. This takes a few minutes.")) return;
+
+        btn.disabled = true;
+        btn.innerText = "⏳ Signing Started...";
+        status.innerText = "Processing in background... do not click again.";
+
+        try {
+            const response = await fetch(`${API_URL}/api/trigger-sign`, { method: 'POST' });
+            const result = await response.json();
+            alert(result.message);
+        } catch (error) {
+            alert("Failed to trigger signer.");
+            btn.disabled = false;
+            btn.innerText = "⚡ Sign All Apps Now";
+        }
+    }
+
     function renderUsers(users) {
         const tbody = document.getElementById('usersBody');
         tbody.innerHTML = '';
-
         if (users.length === 0) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No users found.</td></tr>';
             return;
         }
-
         users.forEach(user => {
             const date = new Date(user.reg_date).toLocaleString();
             const statusHtml = user.isPaid 
@@ -102,16 +137,9 @@
         });
     }
 
-    // ✨ NEW: The search filter function
     function filterUsers() {
         const query = document.getElementById('searchInput').value.toLowerCase();
-        
-        // Filter the global array based on the typed query
-        const filteredUsers = allUsersData.filter(user => {
-            return user.udid && user.udid.toLowerCase().includes(query);
-        });
-        
-        // Re-draw the table with only the matched users
+        const filteredUsers = allUsersData.filter(user => user.udid && user.udid.toLowerCase().includes(query));
         renderUsers(filteredUsers);
     }
 
@@ -124,11 +152,8 @@
                 body: JSON.stringify({ udid, isPaid })
             });
             if (response.ok) {
-                // Clear the search bar and reload the fresh data from server
                 document.getElementById('searchInput').value = ''; 
                 loadUsers();
-            } else {
-                alert("Failed to update status.");
             }
         } catch (error) { alert("API Error."); }
     }
@@ -142,17 +167,13 @@
                 body: JSON.stringify({ udid })
             });
             if (response.ok) {
-                alert("Timer bypassed! They can install immediately.");
-                // Clear the search bar and reload the fresh data from server
+                alert("Timer bypassed!");
                 document.getElementById('searchInput').value = '';
                 loadUsers();
-            } else {
-                alert("Failed to bypass timer.");
             }
         } catch (error) { alert("API Error."); }
     }
 
-    // Load users immediately when the page opens
     loadUsers();
 </script>
 
