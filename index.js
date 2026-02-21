@@ -318,7 +318,7 @@ async function reSignAllApps() {
             console.log(`📦 Processing: ${app.name}`);
 
             try {
-                // ✨ FIX: STREAM DOWNLOAD DIRECTLY TO DISK (Zero RAM usage)
+                // 1. STREAM DOWNLOAD DIRECTLY TO DISK
                 const downloadStream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
                 const fileWriter = fs.createWriteStream(tempInput);
                 
@@ -328,17 +328,33 @@ async function reSignAllApps() {
                     fileWriter.on('error', reject);
                 });
 
-                // B. Run zsign
-                const signCmd = `./zsign -f -z 9 -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
+                // 2. ✨ THE NEW "AUTO-CLEANER" STEP ✨
+                console.log(`🧹 Cleaning ${app.name} (Removing broken Plugins/Watch apps)...`);
+                const cleanCmd = `zip -d ${tempInput} "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`;
                 await new Promise((resolve) => {
-                    exec(signCmd, (err) => {
-                        if (err) console.error(`❌ Sign Fail ${app.name}:`, err.message);
-                        else console.log(`✅ Signed ${app.name}`);
+                    exec(cleanCmd, () => {
+                        // We ignore errors here because if an app doesn't have a PlugIn, zip will throw an error.
+                        // We just want it to keep going!
                         resolve();
                     });
                 });
 
-                // C. Upload using stream
+                // 3. RUN ZSIGN (With Forced Bundle ID)
+                console.log(`✍️ Signing ${app.name}...`);
+                const signCmd = `./zsign -f -z 9 -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
+                await new Promise((resolve, reject) => {
+                    exec(signCmd, (err, stdout, stderr) => {
+                        if (err) {
+                            console.error(`❌ Sign Fail ${app.name}:`, stderr || err.message);
+                            reject(err);
+                        } else {
+                            console.log(`✅ Signed ${app.name}`);
+                            resolve();
+                        }
+                    });
+                });
+
+                // 4. UPLOAD USING STREAM
                 if (fs.existsSync(tempOutput)) {
                     const uploadStream = fs.createReadStream(tempOutput);
                     await s3.putObject({
