@@ -17,7 +17,6 @@ const client = new MongoClient(uri);
 // 🚀 DIGITALOCEAN SPACES CONFIG
 // ==========================================
 const s3 = new AWS.S3({
-    // 🚨 ADDED "https://" TO PREVENT MISSING SLASH BUGS
     endpoint: 'https://lon1.digitaloceanspaces.com',
     accessKeyId: 'DO00D6GRP9K2RAE873PZ',
     secretAccessKey: 'e4+QnmDLY1WkeWEsSjs260HVUXK1ShUqrrrYYmZ2PRU',
@@ -56,26 +55,17 @@ app.post('/', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-// ==========================================
-// 🚀 3. THE APP MANAGER API (THE SLASH FIXER)
-// ==========================================
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
-        
-        // Fix any old broken links dynamically before sending to Flutter
-        const fixedApps = apps.map(app => {
-            if (app.icon && app.icon.includes('.comicons/')) app.icon = app.icon.replace('.comicons/', '.com/icons/');
-            if (app.ipa && app.ipa.includes('.comapps/')) app.ipa = app.ipa.replace('.comapps/', '.com/apps/');
-            app.info = app.info || app.subtitle || "";
-            return app;
-        });
-
-        res.json(fixedApps);
+        res.json(apps);
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ==========================================
+// 🚀 3. THE APP MANAGER API (SERVER-SIDE PUBLIC FIX)
+// ==========================================
 app.post('/store-api', async (req, res) => {
     try {
         await client.connect();
@@ -95,9 +85,16 @@ app.post('/store-api', async (req, res) => {
             const appId = body.appId || body.bundleId;
             delete body.action;
 
-            // 🚨 Ensures the slash is perfectly placed between CDN and Folder
             const safeIconKey = body.iconKey ? (body.iconKey.startsWith('/') ? body.iconKey.substring(1) : body.iconKey) : null;
             const safeIpaKey = body.ipaKey ? (body.ipaKey.startsWith('/') ? body.ipaKey.substring(1) : body.ipaKey) : null;
+
+            // 🌟 THE MAGIC FIX: Server securely makes files Public, bypassing browser CORS errors
+            try {
+                if (safeIconKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIconKey, ACL: 'public-read' }).promise();
+                if (safeIpaKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIpaKey, ACL: 'public-read' }).promise();
+            } catch (aclError) {
+                console.log("Could not set public ACL:", aclError.message);
+            }
 
             const finalData = {
                 ...body,
@@ -115,12 +112,11 @@ app.post('/store-api', async (req, res) => {
 
         if (action === "get_url") {
             const { fileName, fileType, contentType } = body;
-            
-            // Fix double slash issues here too
             const cleanFileType = fileType.endsWith('/') ? fileType.slice(0, -1) : fileType;
             const key = `${cleanFileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType, ACL: 'public-read' };
+            // 🚨 REMOVED ACL: The browser uploads PRIVATELY so the bar never gets stuck!
+            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType };
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
@@ -139,16 +135,12 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 4. PLIST GENERATOR (CRITICAL FOR INSTALLS)
+// 4. PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
     
-    // Fix missing slash for IPA links
-    if (ipaUrl && ipaUrl.includes('.comapps/')) {
-        ipaUrl = ipaUrl.replace('.comapps/', '.com/apps/');
-    }
-    // Force CDN
+    // Safety check for CDN URL
     if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
