@@ -329,30 +329,35 @@ async function reSignAllApps() {
                 });
 
                 // 2. ✨ THE NEW "AUTO-CLEANER" STEP ✨
-                console.log(`🧹 Cleaning ${app.name} (Removing broken Plugins/Watch apps)...`);
-                const cleanCmd = `zip -d ${tempInput} "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`;
-                await new Promise((resolve) => {
-                    exec(cleanCmd, () => {
-                        // We ignore errors here because if an app doesn't have a PlugIn, zip will throw an error.
-                        // We just want it to keep going!
-                        resolve();
-                    });
-                });
+               console.log(`🧹 Cleaning ${app.name}...`);
+const cleanCmd = `zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`;
+await new Promise((resolve) => {
+    exec(cleanCmd, (err) => {
+        // We ignore "nothing to do" errors from zip
+        resolve();
+    });
+});
 
-                // 3. RUN ZSIGN (With Forced Bundle ID)
-                console.log(`✍️ Signing ${app.name}...`);
-                const signCmd = `./zsign -f -q -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
-                await new Promise((resolve, reject) => {
-                    exec(signCmd, (err, stdout, stderr) => {
-                        if (err) {
-                            console.error(`❌ Sign Fail ${app.name}:`, stderr || err.message);
-                            reject(err);
-                        } else {
-                            console.log(`✅ Signed ${app.name}`);
-                            resolve();
-                        }
-                    });
-                });
+// 3. RUN ZSIGN (With better error reporting)
+console.log(`✍️ Signing ${app.name}...`);
+// Use absolute paths for the cert and provision
+const certPath = path.resolve(P12_PATH);
+const provPath = path.resolve(PROVISION_PATH);
+
+const signCmd = `./zsign -f -q -b '${app.bundleId}' -k "${certPath}" -p "${P12_PASS}" -m "${provPath}" -o "${tempOutput}" "${tempInput}"`;
+
+await new Promise((resolve, reject) => {
+    exec(signCmd, (err, stdout, stderr) => {
+        if (err) {
+            // This will now print the REAL error from zsign (e.g. "P12 file not found")
+            console.error(`❌ REAL ERROR for ${app.name}:`, stderr || stdout || err.message);
+            reject(err);
+        } else {
+            console.log(`✅ Signed ${app.name}`);
+            resolve();
+        }
+    });
+});
 
                 // 4. UPLOAD USING STREAM
                 if (fs.existsSync(tempOutput)) {
