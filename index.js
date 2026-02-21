@@ -249,22 +249,39 @@ const PROVISION_PATH = path.join(__dirname, 'latest.mobileprovision');
 
 async function updateProvisioningProfile() {
     try {
-        const response = await fetch('https://api.appstoreconnect.apple.com/v1/profiles?limit=10', {
+        // ✨ FIXED: Fetch 200 profiles and ask Apple to only send ACTIVE ones
+        const response = await fetch('https://api.appstoreconnect.apple.com/v1/profiles?limit=200&filter[profileState]=ACTIVE', {
             headers: { 'Authorization': `Bearer ${getAppleToken()}` }
         });
+        
         const data = await response.json();
+        
+        if (data.errors) {
+            throw new Error(data.errors[0].detail);
+        }
+
         const profileList = data.data || [];
         
-        if (profileList.length === 0) throw new Error("No profiles found on Apple account");
+        if (profileList.length === 0) {
+            console.log("Raw Apple Response:", JSON.stringify(data)); // For debugging
+            throw new Error("No ACTIVE profiles found. Check API Key permissions.");
+        }
         
-        let targetProfile = profileList[0];
-        for (let p of profileList) {
-            if (p.attributes.profileState === 'ACTIVE') { targetProfile = p; break; }
+        // ✨ NEW: Specifically look for your "kurde" profile
+        let targetProfile = profileList.find(p => p.attributes.name === 'kurde');
+        
+        // If it can't find "kurde" exactly, just grab the first active one it finds
+        if (!targetProfile) {
+            targetProfile = profileList[0];
         }
 
         const profileContent = targetProfile.attributes.profileContent; 
+        if (!profileContent) {
+            throw new Error("Profile found, but Apple didn't send the file content.");
+        }
+
         fs.writeFileSync(PROVISION_PATH, Buffer.from(profileContent, 'base64'));
-        console.log("✅ Latest .mobileprovision downloaded directly from Apple");
+        console.log(`✅ Downloaded .mobileprovision ('${targetProfile.attributes.name}') directly from Apple`);
     } catch (e) {
         console.error("❌ Profile Error:", e.message);
         throw e;
