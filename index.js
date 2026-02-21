@@ -66,16 +66,20 @@ app.post('/', async (req, res) => {
 
 app.get('/api/apple-usage', async (req, res) => {
     try {
-        const token = new Token(appleConfig.keyId, appleConfig.issuerId, appleConfig.privateKey);
-        const api = new AppStoreConnect(token);
+        // ✨ FIXED: Passing appleConfig directly
+        const api = new AppStoreConnect(appleConfig);
         const devices = await api.devices.list();
         
-        // Count how many are active
+        const deviceList = devices.data || devices;
+
         res.json({
-            used: devices.length,
-            remaining: 100 - devices.length
+            used: deviceList.length,
+            remaining: 100 - deviceList.length
         });
-    } catch (e) { res.status(500).send(e.message); }
+    } catch (e) { 
+        console.error("Usage Error:", e.message);
+        res.status(500).json({ error: e.message }); 
+    }
 });
 
 // ==========================================
@@ -242,16 +246,22 @@ const PROVISION_PATH = path.join(__dirname, 'latest.mobileprovision');
 
 async function updateProvisioningProfile() {
     try {
-        const token = new Token(appleConfig.keyId, appleConfig.issuerId, appleConfig.privateKey);
-        const api = new AppStoreConnect(token);
+        // ✨ FIXED: Passing appleConfig directly instead of using Token constructor
+        const api = new AppStoreConnect(appleConfig);
         
         const profiles = await api.profiles.list();
-        if (!profiles || !profiles.data || profiles.data.length === 0) {
+        
+        // Profiles data is usually in .data for this SDK
+        const profileList = profiles.data || profiles; 
+        
+        if (!profileList || profileList.length === 0) {
             throw new Error("No profiles found on Apple account");
         }
         
-        const profileContent = profiles.data[0].attributes.profileContent; 
+        // Get the first profile's content (Base64)
+        const profileContent = profileList[0].attributes.profileContent; 
         fs.writeFileSync(PROVISION_PATH, Buffer.from(profileContent, 'base64'));
+        
         console.log("✅ Latest .mobileprovision downloaded from Apple");
     } catch (e) {
         console.error("❌ Failed to get profile from Apple:", e.message);
