@@ -302,13 +302,14 @@ async function updateProvisioningProfile() {
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign process (EXTREME Memory-Safe Mode)...");
+    console.log("🔄 Starting Bulk Re-Sign (High-Stability Spawn Mode)...");
     try {
         await updateProvisioningProfile();
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
 
         for (let app of apps) {
+            // Skip config items or apps without IPA keys
             if (!app.ipaKey || app.appId === "store_config_v1" || app.isGame === "config") continue;
 
             const safeIpaKey = app.ipaKey.startsWith('/') ? app.ipaKey.substring(1) : app.ipaKey;
@@ -318,72 +319,67 @@ async function reSignAllApps() {
             console.log(`📦 Processing: ${app.name}`);
 
             try {
-                // 1. STREAM DOWNLOAD DIRECTLY TO DISK
+                // A. Download IPA
                 const downloadStream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
                 const fileWriter = fs.createWriteStream(tempInput);
-                
                 await new Promise((resolve, reject) => {
                     downloadStream.pipe(fileWriter);
                     fileWriter.on('finish', resolve);
                     fileWriter.on('error', reject);
                 });
 
-                // 2. ✨ THE NEW "AUTO-CLEANER" STEP ✨
-               console.log(`🧹 Cleaning ${app.name}...`);
-const cleanCmd = `zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`;
-await new Promise((resolve) => {
-    exec(cleanCmd, (err) => {
-        // We ignore "nothing to do" errors from zip
-        resolve();
-    });
-});
+                // B. Clean IPA (Strip problematic plugins/folders)
+                console.log(`🧹 Cleaning ${app.name}...`);
+                await new Promise((resolve) => {
+                    exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*"`, () => resolve());
+                });
 
-// 3. RUN ZSIGN (With better error reporting)
-console.log(`✍️ Signing ${app.name}...`);
-// Use absolute paths for the cert and provision
-const certPath = path.resolve(P12_PATH);
-const provPath = path.resolve(PROVISION_PATH);
+                // C. Sign using Spawn (Handles large games like Subway Surfers better)
+                console.log(`✍️ Signing ${app.name}...`);
+                const { spawn } = require('child_process');
+                
+                // -f: force, -q: quiet, -b: bundleId
+                const args = ['-f', '-q', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
 
-const signCmd = `./zsign -f -q -b '${app.bundleId}' -k "${certPath}" -p "${P12_PASS}" -m "${provPath}" -o "${tempOutput}" "${tempInput}"`;
+                await new Promise((resolve, reject) => {
+                    const signer = spawn('./zsign', args);
+                    let errorOutput = '';
 
-await new Promise((resolve, reject) => {
-    exec(signCmd, (err, stdout, stderr) => {
-        if (err) {
-            // This will now print the REAL error from zsign (e.g. "P12 file not found")
-            console.error(`❌ REAL ERROR for ${app.name}:`, stderr || stdout || err.message);
-            reject(err);
-        } else {
-            console.log(`✅ Signed ${app.name}`);
-            resolve();
-        }
-    });
-});
+                    signer.stderr.on('data', (data) => { errorOutput += data.toString(); });
+                    
+                    signer.on('close', (code) => {
+                        if (code === 0) {
+                            console.log(`✅ Successfully Signed: ${app.name}`);
+                            resolve();
+                        } else {
+                            console.error(`❌ Signer failed with code ${code}. Details: ${errorOutput}`);
+                            reject(new Error(errorOutput));
+                        }
+                    });
+                });
 
-                // 4. UPLOAD USING STREAM
+                // D. Upload Signed IPA
                 if (fs.existsSync(tempOutput)) {
-                    const uploadStream = fs.createReadStream(tempOutput);
                     await s3.putObject({
-                        Bucket: SPACES_BUCKET, 
-                        Key: safeIpaKey, 
-                        Body: uploadStream, 
-                        ACL: 'public-read', 
+                        Bucket: SPACES_BUCKET,
+                        Key: safeIpaKey,
+                        Body: fs.createReadStream(tempOutput),
+                        ACL: 'public-read',
                         ContentType: 'application/octet-stream'
                     }).promise();
-                    console.log(`☁️ Uploaded ${app.name}`);
+                    console.log(`☁️ Uploaded ${app.name} to Space`);
                 }
-            } catch (err) { 
-                console.error(`❌ Error ${app.name}:`, err.message); 
+            } catch (err) {
+                console.error(`❌ Critical Error on ${app.name}:`, err.message);
             } finally {
+                // Cleanup temp files to save disk space
                 if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
                 if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
-                // 🧠 Deep memory clear
-                if (global.gc) global.gc();
-                await new Promise(r => setTimeout(r, 5000)); // 5 second break
+                await new Promise(r => setTimeout(r, 2000)); // Short breather
             }
         }
-        console.log("✨ All apps updated successfully!");
-    } catch (e) { 
-        console.error("❌ Bulk Sign Error:", e.message); 
+    } catch (e) {
+        console.error("❌ Bulk Sign Error:", e.message);
     }
 }
 
