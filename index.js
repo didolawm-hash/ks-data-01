@@ -37,7 +37,7 @@ app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.ht
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
 // ==========================================
-// 2. UDID & STATUS
+// 2. UDID ENROLLMENT
 // ==========================================
 app.post('/', async (req, res) => {
     try {
@@ -55,17 +55,64 @@ app.post('/', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
-app.get('/get-apps', async (req, res) => {
+// ==========================================
+// 👥 3. USER MANAGEMENT API (RESTORED!)
+// ==========================================
+app.get('/status', async (req, res) => {
+    const { udid } = req.query;
     try {
         await client.connect();
-        const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
-        res.json(apps);
+        const user = await client.db("KurdeStore").collection("kurdestore_users").findOne({ udid: udid });
+        res.json(user || { isPaid: false, not_found: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.get('/api/users', async (req, res) => {
+    try {
+        await client.connect();
+        const users = await client.db("KurdeStore").collection("kurdestore_users").find({}).sort({reg_date: -1}).toArray();
+        res.json(users);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/update-status', async (req, res) => {
+    const { udid, isPaid } = req.body;
+    try {
+        await client.connect();
+        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
+        res.json({ success: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/bypass-time', async (req, res) => {
+    const { udid } = req.body;
+    try {
+        await client.connect();
+        const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
+        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { reg_date: pastDate } });
+        res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ==========================================
-// 🚀 3. THE APP MANAGER API (SERVER-SIDE PUBLIC FIX)
+// 🚀 4. THE APP MANAGER API
 // ==========================================
+app.get('/get-apps', async (req, res) => {
+    try {
+        await client.connect();
+        const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
+        
+        const fixedApps = apps.map(app => {
+            if (app.icon && app.icon.includes('.comicons/')) app.icon = app.icon.replace('.comicons/', '.com/icons/');
+            if (app.ipa && app.ipa.includes('.comapps/')) app.ipa = app.ipa.replace('.comapps/', '.com/apps/');
+            app.info = app.info || app.subtitle || "";
+            return app;
+        });
+
+        res.json(fixedApps);
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post('/store-api', async (req, res) => {
     try {
         await client.connect();
@@ -88,7 +135,7 @@ app.post('/store-api', async (req, res) => {
             const safeIconKey = body.iconKey ? (body.iconKey.startsWith('/') ? body.iconKey.substring(1) : body.iconKey) : null;
             const safeIpaKey = body.ipaKey ? (body.ipaKey.startsWith('/') ? body.ipaKey.substring(1) : body.ipaKey) : null;
 
-            // 🌟 THE MAGIC FIX: Server securely makes files Public, bypassing browser CORS errors
+            // Securely make files Public
             try {
                 if (safeIconKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIconKey, ACL: 'public-read' }).promise();
                 if (safeIpaKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIpaKey, ACL: 'public-read' }).promise();
@@ -115,7 +162,6 @@ app.post('/store-api', async (req, res) => {
             const cleanFileType = fileType.endsWith('/') ? fileType.slice(0, -1) : fileType;
             const key = `${cleanFileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
             
-            // 🚨 REMOVED ACL: The browser uploads PRIVATELY so the bar never gets stuck!
             const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType };
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
@@ -135,12 +181,12 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 4. PLIST GENERATOR
+// 5. PLIST GENERATOR
 // ==========================================
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
     
-    // Safety check for CDN URL
+    if (ipaUrl && ipaUrl.includes('.comapps/')) ipaUrl = ipaUrl.replace('.comapps/', '.com/apps/');
     if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
