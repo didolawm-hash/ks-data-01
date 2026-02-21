@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KurdeStore Pro Admin</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <style>
         body { background-color: #0f0f0f; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         .container { width: 100%; max-width: 700px; display: flex; flex-direction: column; gap: 25px; }
@@ -25,7 +25,7 @@
         .bar { height: 100%; background: #0a84ff; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 10px #0a84ff; }
         
         .app-item { display: flex; align-items: center; background: #222; padding: 15px; margin-bottom: 12px; border-radius: 14px; border: 1px solid #333; }
-        .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; }
+        .app-icon { width: 55px; height: 55px; border-radius: 12px; object-fit: cover; margin-right: 15px; background: #333; }
         .app-info { flex: 1; }
         .app-name { font-weight: bold; font-size: 17px; }
         .app-subtitle { font-size: 13px; color: #0a84ff; margin-bottom: 2px; }
@@ -45,7 +45,8 @@
 
         <input type="hidden" id="originalIpaKey">
         <input type="hidden" id="originalIconKey">
-        <input type="hidden" id="originalFullIconUrl"> <span class="label">Files</span>
+        <input type="hidden" id="originalFullIconUrl"> 
+        <span class="label">Files</span>
         <div id="iconInputContainer">
             <input type="file" id="iconFile" accept="image/*" placeholder="Icon (Optional on Update)">
             <div class="bar-container"><div class="bar" id="iconBar"></div></div>
@@ -60,7 +61,7 @@
         <textarea id="desc" placeholder="Full Description / Features"></textarea>
         
         <span class="label">System Info</span>
-        <input type="text" id="bundleId" placeholder="Bundle ID">
+        <input type="text" id="bundleId" placeholder="Bundle ID (Auto-Detects)">
         <div style="display: flex; gap: 10px;">
             <input type="text" id="version" placeholder="Version">
             <input type="text" id="size" placeholder="Size" readonly>
@@ -86,6 +87,9 @@
 <script>
     const API_URL = "https://api.kurde.store/store-api";
     const S3_BASE_URL = "https://my-app-store.lon1.digitaloceanspaces.com";
+    
+    // 🚨 FIX 2: Built-in safe SVG image. No more via.placeholder.com errors!
+    const SAFE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1NSIgaGVpZ2h0PSI1NSIgdmlld0JveD0iMCAwIDU1IDU1Ij48cmVjdCB3aWR0aD0iNTUiIGhlaWdodD0iNTUiIGZpbGw9IiMzMzMiIHJ4PSIxMiIvPjx0ZXh0IHg9IjI3LjUiIHk9IjMzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXBwPC90ZXh0Pjwvc3ZnPg==';
 
     let allData = [];
     let isEditing = false;
@@ -95,19 +99,39 @@
     async function handleIpaSelection() {
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
+        
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+        updateStatus("Scanning IPA for Bundle ID...");
+
         try {
+            if (typeof JSZip === 'undefined') {
+                throw new Error("JSZip failed to load. Ad-blocker might be active.");
+            }
+
             const zip = await JSZip.loadAsync(file);
-            const plistFile = Object.keys(zip.files).find(path => path.endsWith("Info.plist") && path.includes(".app/"));
+            // Search for Info.plist inside the Payload folder
+            const plistFile = Object.keys(zip.files).find(path => path.match(/Payload\/[^\/]+\.app\/Info\.plist$/));
+            
             if (plistFile && !isEditing) {
                 const content = await zip.files[plistFile].async("string");
-                let bMatch = content.match(/CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
-                let vMatch = content.match(/CFBundleShortVersionString<\/key>\s*<string>([^<]+)<\/string>/);
-                if (bMatch) document.getElementById('bundleId').value = bMatch[1].replace(/[^a-zA-Z0-9\.-]/g, '');
-                if (vMatch) document.getElementById('version').value = vMatch[1].replace(/[^0-9\.]/g, '');
-                updateStatus("✅ Metadata Scanned");
+                
+                // Extract using Regex
+                let bMatch = content.match(/<key>CFBundleIdentifier<\/key>[\s\S]*?<string>(.*?)<\/string>/);
+                let vMatch = content.match(/<key>CFBundleShortVersionString<\/key>[\s\S]*?<string>(.*?)<\/string>/);
+                let nMatch = content.match(/<key>CFBundleDisplayName<\/key>[\s\S]*?<string>(.*?)<\/string>/) || content.match(/<key>CFBundleName<\/key>[\s\S]*?<string>(.*?)<\/string>/);
+                
+                if (bMatch && bMatch[1]) document.getElementById('bundleId').value = bMatch[1];
+                if (vMatch && vMatch[1]) document.getElementById('version').value = vMatch[1];
+                if (nMatch && nMatch[1] && !document.getElementById('name').value) document.getElementById('name').value = nMatch[1];
+                
+                updateStatus("✅ Bundle ID Auto-Detected: " + (bMatch ? bMatch[1] : "Unknown"));
+            } else {
+                updateStatus("⚠️ Could not find Info.plist in IPA", true);
             }
-        } catch (e) { updateStatus("⚠️ Scan Error", true); }
+        } catch (e) { 
+            console.error(e);
+            updateStatus("⚠️ Scan Error: " + e.message, true); 
+        }
     }
 
     async function startUpload() {
@@ -124,35 +148,31 @@
         updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
-            // Get existing data
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
             let oldIconUrl = document.getElementById('originalFullIconUrl').value;
 
-            // 1. Handle ICON Upload or Preservation
             let finalIconUrl = "";
             
             if (iconFile) {
                 updateStatus("Uploading New Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-                finalIconUrl = S3_BASE_URL + iconKey;
+                finalIconUrl = S3_BASE_URL + "/" + iconKey;
             } else {
-                // No new file? Try to use the Key, if no key, use the Old URL (Legacy Support)
                 if (iconKey) {
-                    finalIconUrl = S3_BASE_URL + iconKey;
+                    finalIconUrl = S3_BASE_URL + "/" + iconKey;
                 } else {
-                    finalIconUrl = oldIconUrl; // SAFETY FALLBACK
+                    finalIconUrl = oldIconUrl;
                 }
             }
 
-            // 2. Handle IPA Upload
             let finalIpaUrl = "";
             if (ipaFile) {
                 updateStatus("Uploading New IPA...");
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
-                finalIpaUrl = S3_BASE_URL + ipaKey;
+                finalIpaUrl = S3_BASE_URL + "/" + ipaKey;
             } else {
-                if (ipaKey) finalIpaUrl = S3_BASE_URL + ipaKey;
+                if (ipaKey) finalIpaUrl = S3_BASE_URL + "/" + ipaKey;
             }
 
             const payload = {
@@ -167,7 +187,7 @@
                 isGame: document.getElementById('isGame').value === "true",
                 iconKey: iconKey,
                 ipaKey: ipaKey,
-                icon: finalIconUrl, // This is now SAFE
+                icon: finalIconUrl,
                 ipa: finalIpaUrl
             };
 
@@ -187,7 +207,8 @@
             xhr.open('PUT', uploadUrl);
             xhr.setRequestHeader('Content-Type', file.type);
             xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
-            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject();
+            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed"));
+            xhr.onerror = () => reject(new Error("Network Error"));
             xhr.send(file);
         });
     }
@@ -216,12 +237,12 @@
             const card = document.createElement('div');
             card.className = 'app-item';
             
-            // Smart Icon Display
-            let iconSrc = item.icon || (item.iconKey ? (S3_BASE_URL + item.iconKey) : "https://via.placeholder.com/55");
+            // Apply Safe Placeholder here
+            let iconSrc = item.icon || (item.iconKey ? (S3_BASE_URL + "/" + item.iconKey) : SAFE_PLACEHOLDER);
             const itemString = encodeURIComponent(JSON.stringify(item));
 
             card.innerHTML = `
-                <img src="${iconSrc}" class="app-icon" onerror="this.src='https://via.placeholder.com/55'">
+                <img src="${iconSrc}" class="app-icon" onerror="this.src='${SAFE_PLACEHOLDER}'">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-subtitle">${item.info || ''}</div> 
@@ -249,14 +270,13 @@
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
         document.getElementById('bundleId').value = item.bundleId || item.appId;
-        document.getElementById('version').value = item.version;
-        document.getElementById('size').value = item.size;
+        document.getElementById('version').value = item.version || "";
+        document.getElementById('size').value = item.size || "";
         document.getElementById('isGame').value = String(item.isGame);
         
-        // SAVE OLD DATA SO WE DON'T LOSE IT
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
-        document.getElementById('originalFullIconUrl').value = item.icon || ""; // Critical Fix
+        document.getElementById('originalFullIconUrl').value = item.icon || ""; 
 
         document.getElementById('bundleId').readOnly = true;
         document.getElementById('bundleId').style.opacity = "0.6";
