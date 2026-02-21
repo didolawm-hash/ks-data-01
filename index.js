@@ -328,61 +328,55 @@ async function reSignAllApps() {
                     fileWriter.on('error', reject);
                 });
 
-                // B. Clean IPA (Strip problematic plugins/folders)
+                // B. Deep Clean IPA
                 console.log(`🧹 Deep Cleaning ${app.name}...`);
                 await new Promise((resolve) => {
                     const deepCleanCmd = `zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata"`;
-    exec(deepCleanCmd, () => resolve())
+                    exec(deepCleanCmd, () => resolve());
                 });
 
-                // C. Sign using Spawn (Handles large games like Subway Surfers better)
+                // C. Sign using Spawn
                 console.log(`✍️ Signing ${app.name}...`);
                 const { spawn } = require('child_process');
-                
-                // -f: force, -q: quiet, -b: bundleId
                 const args = ['-f', '-q', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
 
                 await new Promise((resolve, reject) => {
                     const signer = spawn('./zsign', args);
                     let errorOutput = '';
-
                     signer.stderr.on('data', (data) => { errorOutput += data.toString(); });
-                    
                     signer.on('close', (code) => {
                         if (code === 0) {
                             console.log(`✅ Successfully Signed: ${app.name}`);
                             resolve();
                         } else {
-                            console.error(`❌ Signer failed with code ${code}. Details: ${errorOutput}`);
-                            reject(new Error(errorOutput));
+                            console.error(`❌ Signer failed with code ${code}.`);
+                            reject(new Error(`Exit code ${code}`));
                         }
                     });
                 });
 
-                // D. Upload Signed IPA
+                // D. Upload Signed IPA with Error Catching
                 if (fs.existsSync(tempOutput)) {
-    console.log(`☁️ Uploading ${app.name} to Space...`);
-    try {
-        await s3.putObject({
-            Bucket: SPACES_BUCKET,
-            Key: safeIpaKey,
-            Body: fs.createReadStream(tempOutput),
-            ACL: 'public-read',
-            ContentType: 'application/octet-stream'
-        }).promise();
-        console.log(`✅ Upload Complete: ${app.name}`);
-    } catch (uploadErr) {
-        console.error(`⚠️ Upload failed for ${app.name}, skipping to next:`, uploadErr.message);
-    }
-} catch (err) {
+                    console.log(`☁️ Uploading ${app.name} to Space...`);
+                    await s3.putObject({
+                        Bucket: SPACES_BUCKET,
+                        Key: safeIpaKey,
+                        Body: fs.createReadStream(tempOutput),
+                        ACL: 'public-read',
+                        ContentType: 'application/octet-stream'
+                    }).promise();
+                    console.log(`✅ Upload Complete: ${app.name}`);
+                }
+            } catch (err) {
                 console.error(`❌ Critical Error on ${app.name}:`, err.message);
+                // Keep the loop going even if one app fails
             } finally {
-                // Cleanup temp files to save disk space
                 if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
                 if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
-                await new Promise(r => setTimeout(r, 2000)); // Short breather
+                await new Promise(r => setTimeout(r, 2000)); 
             }
-        }
+        } // End of for-loop
+        console.log("✨ All apps processed!");
     } catch (e) {
         console.error("❌ Bulk Sign Error:", e.message);
     }
