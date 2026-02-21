@@ -341,7 +341,7 @@ async function reSignAllApps() {
 
                 // 3. RUN ZSIGN (With Forced Bundle ID)
                 console.log(`✍️ Signing ${app.name}...`);
-                const signCmd = `./zsign -f -z 9 -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
+                const signCmd = `./zsign -f -q -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
                 await new Promise((resolve, reject) => {
                     exec(signCmd, (err, stdout, stderr) => {
                         if (err) {
