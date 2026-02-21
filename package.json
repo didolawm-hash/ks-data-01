@@ -9,5 +9,6 @@
     "mongodb": "^6.3.0",
     "cors": "^2.8.5",
     "aws-sdk": "^2.1500.0"
+    "appstore-connect-jwt": "^1.0.0"
   }
 }
