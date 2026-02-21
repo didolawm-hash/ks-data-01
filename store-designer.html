@@ -57,6 +57,18 @@
         <span class="label">⭐ Spotlight</span>
         <input type="text" id="featuredAppId" placeholder="Enter App Bundle ID to Feature (e.g. com.pubg.hack)">
         
+        <span class="label">✨ Spotlight Styling</span>
+        <div class="toggle-row" style="border: 1px solid #ffd700; background: #2a2400;">
+            <span class="toggle-label" style="color: #ffd700;">Enable Golden Glow Effect?</span>
+            <input type="checkbox" id="spotlightGlow">
+        </div>
+        <input type="text" id="spotlightTitle" placeholder="Spotlight Text (e.g. 'APP OF THE WEEK')">
+        <select id="spotlightStyle">
+            <option value="gold">🏆 Royal Gold (Current)</option>
+            <option value="neon_blue">🟦 Neon Blue</option>
+            <option value="deep_red">🟥 Deep Imperial Red</option>
+        </select>
+        
         <span class="label">🎨 Layout & Links</span>
         <div class="row">
             <select id="layoutStyle">
@@ -81,6 +93,24 @@
         <div class="row">
             <input type="color" id="themeColor" value="#0a84ff" style="height:45px; flex:0.2;">
             <input type="text" id="themeHex" readonly style="flex:0.8;">
+        </div>
+
+        <span class="label">👑 Royalty Theme Engine</span>
+        <div class="row">
+            <div style="flex:1">
+                <span class="label" style="margin-top:0;">Main Accent</span>
+                <div class="row" style="gap:5px;">
+                    <input type="color" id="primaryColor" value="#0a84ff" style="height:45px; flex:0.3;">
+                    <input type="text" id="primaryHex" readonly style="flex:0.7;" placeholder="#0a84ff">
+                </div>
+            </div>
+            <div style="flex:1">
+                <span class="label" style="margin-top:0;">Royalty Glow</span>
+                <div class="row" style="gap:5px;">
+                    <input type="color" id="royaltyColor" value="#5e5ce6" style="height:45px; flex:0.3;">
+                    <input type="text" id="royaltyHex" readonly style="flex:0.7;" placeholder="#5e5ce6">
+                </div>
+            </div>
         </div>
 
         <button onclick="saveConfig()" class="save-btn">🚀 Publish Changes</button>
@@ -114,6 +144,11 @@
                 // Featured
                 document.getElementById('featuredAppId').value = config.featuredAppId || "";
                 
+                // ✨ NEW: Spotlight
+                document.getElementById('spotlightGlow').checked = config.spotlightGlow || false;
+                document.getElementById('spotlightTitle').value = config.spotlightTitle || "";
+                document.getElementById('spotlightStyle').value = config.spotlightStyle || "gold";
+                
                 // Layout
                 document.getElementById('layoutStyle').value = config.layoutStyle || "list";
                 document.getElementById('telegramLink').value = config.telegramLink || "";
@@ -126,6 +161,17 @@
                     document.getElementById('themeColor').value = config.themeColor;
                     document.getElementById('themeHex').value = config.themeColor;
                 }
+
+                // 👑 NEW: Royalty Theme
+                if (config.primaryColor) {
+                    document.getElementById('primaryColor').value = config.primaryColor;
+                    document.getElementById('primaryHex').value = config.primaryColor;
+                }
+                if (config.royaltyColor) {
+                    document.getElementById('royaltyColor').value = config.royaltyColor;
+                    document.getElementById('royaltyHex').value = config.royaltyColor;
+                }
+
                 status.innerText = "✅ Config Loaded";
                 status.style.color = "#30d158";
             } else {
@@ -157,6 +203,11 @@
 
             // 3. Featured
             featuredAppId: document.getElementById('featuredAppId').value,
+            
+            // ✨ 3b. Spotlight Additions
+            spotlightGlow: document.getElementById('spotlightGlow').checked,
+            spotlightTitle: document.getElementById('spotlightTitle').value,
+            spotlightStyle: document.getElementById('spotlightStyle').value,
 
             // 4. Layout
             layoutStyle: document.getElementById('layoutStyle').value,
@@ -164,9 +215,12 @@
             showToday: document.getElementById('showToday').checked,
             showUpdated: document.getElementById('showUpdated').checked,
 
-            // 5. Visuals
+            // 5. Visuals & 👑 Royalty Theme
             banners: document.getElementById('bannerUrls').value.split('\n').filter(s => s.trim()),
             themeColor: document.getElementById('themeColor').value,
+            primaryColor: document.getElementById('primaryColor').value,
+            royaltyColor: document.getElementById('royaltyColor').value,
+            
             updatedAt: new Date().toISOString()
         };
 
@@ -177,8 +231,15 @@
         } catch (e) { status.innerText = "❌ Save Failed"; status.style.color = "#ff3b30"; }
     }
 
+    // Auto-update Hex Textboxes when color is picked
     document.getElementById('themeColor').oninput = function() {
         document.getElementById('themeHex').value = this.value;
+    };
+    document.getElementById('primaryColor').oninput = function() {
+        document.getElementById('primaryHex').value = this.value;
+    };
+    document.getElementById('royaltyColor').oninput = function() {
+        document.getElementById('royaltyHex').value = this.value;
     };
 </script>
 </body>
