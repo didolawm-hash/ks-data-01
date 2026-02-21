@@ -3,7 +3,15 @@ const { MongoClient } = require('mongodb');
 const cors = require('cors');
 const path = require('path');
 const AWS = require('aws-sdk');
+const { AppStoreConnect, Token } = require('appstore-connect-jwt');
+const fs = require('fs');
 
+const appleConfig = {
+    issuerId: 'cbb536cc-f3f9-4ce6-a9d6-f5cb45012a25',
+    keyId: '9AB47782V5',
+    // 🚨 Ensure your .p8 file is uploaded to GitHub and named correctly here
+    privateKey: fs.readFileSync(path.join(__dirname, 'AuthKey_AB8763YW8M.p8'), 'utf8')
+};
 const app = express();
 app.use(express.json()); 
 app.use(express.text({ type: '*/*' })); 
@@ -79,17 +87,29 @@ app.post('/api/update-status', async (req, res) => {
     const { udid, isPaid } = req.body;
     try {
         await client.connect();
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
+        const db = client.db("KurdeStore");
+        
+        // 🚀 AUTOMATION: If you click 'Approve', send UDID to Apple account immediately
+        if (isPaid === true) {
+            console.log(`🚀 Registering UDID ${udid} with Apple...`);
+            
+            try {
+                const token = new Token(appleConfig.keyId, appleConfig.issuerId, appleConfig.privateKey);
+                const api = new AppStoreConnect(token);
 
-app.post('/api/bypass-time', async (req, res) => {
-    const { udid } = req.body;
-    try {
-        await client.connect();
-        const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { reg_date: pastDate } });
+                await api.devices.register({
+                    name: `User_${udid.slice(0, 5)}`,
+                    platform: 'IOS',
+                    udid: udid
+                });
+                console.log("✅ Registered with Apple Developer Portal");
+            } catch (appleErr) {
+                console.error("❌ Apple Portal Error:", appleErr.message);
+                // We continue so the user is still marked 'Paid' in your DB even if Apple API fails
+            }
+        }
+
+        await db.collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
