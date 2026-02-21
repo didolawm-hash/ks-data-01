@@ -321,6 +321,17 @@ async function reSignAllApps() {
 
 // 🚀 SET THE TIMER (Runs every 10 minutes)
 setInterval(reSignAllApps, 10 * 60 * 1000);
-
+// ==========================================
+// 🚀 7. MANUAL SIGNER TRIGGER
+// ==========================================
+app.post('/api/trigger-sign', (req, res) => {
+    // Run the existing reSignAllApps function immediately
+    reSignAllApps().catch(err => console.error("Manual Trigger Error:", err));
+    
+    res.json({ 
+        success: true, 
+        message: "🚀 Bulk signing process started in the background. Check logs for progress." 
+    });
+});
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
