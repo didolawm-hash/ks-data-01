@@ -361,16 +361,20 @@ async function reSignAllApps() {
 
                 // D. Upload Signed IPA
                 if (fs.existsSync(tempOutput)) {
-                    await s3.putObject({
-                        Bucket: SPACES_BUCKET,
-                        Key: safeIpaKey,
-                        Body: fs.createReadStream(tempOutput),
-                        ACL: 'public-read',
-                        ContentType: 'application/octet-stream'
-                    }).promise();
-                    console.log(`☁️ Uploaded ${app.name} to Space`);
-                }
-            } catch (err) {
+    console.log(`☁️ Uploading ${app.name} to Space...`);
+    try {
+        await s3.putObject({
+            Bucket: SPACES_BUCKET,
+            Key: safeIpaKey,
+            Body: fs.createReadStream(tempOutput),
+            ACL: 'public-read',
+            ContentType: 'application/octet-stream'
+        }).promise();
+        console.log(`✅ Upload Complete: ${app.name}`);
+    } catch (uploadErr) {
+        console.error(`⚠️ Upload failed for ${app.name}, skipping to next:`, uploadErr.message);
+    }
+} catch (err) {
                 console.error(`❌ Critical Error on ${app.name}:`, err.message);
             } finally {
                 // Cleanup temp files to save disk space
