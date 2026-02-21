@@ -63,6 +63,19 @@ app.post('/', async (req, res) => {
     } catch (e) { res.status(500).send(e.message); }
 });
 
+app.get('/api/apple-usage', async (req, res) => {
+    try {
+        const token = new Token(appleConfig.keyId, appleConfig.issuerId, appleConfig.privateKey);
+        const api = new AppStoreConnect(token);
+        const devices = await api.devices.list();
+        
+        // Count how many are active
+        res.json({
+            used: devices.length,
+            remaining: 100 - devices.length
+        });
+    } catch (e) { res.status(500).send(e.message); }
+});
 // ==========================================
 // 👥 3. USER MANAGEMENT API (RESTORED!)
 // ==========================================
