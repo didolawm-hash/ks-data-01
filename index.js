@@ -3,7 +3,7 @@ const { MongoClient } = require('mongodb');
 const cors = require('cors');
 const path = require('path');
 const AWS = require('aws-sdk');
-const { AppStoreConnect, Token } = require('appstore-connect-jwt');
+const { AppStoreConnect, Token } = require('appstore-connect-sdk');
 const fs = require('fs');
 
 const appleConfig = {
