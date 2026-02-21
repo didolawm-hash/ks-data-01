@@ -9,17 +9,30 @@ const { exec } = require('child_process');
 
 const appleConfig = {
     issuerId: 'cbb536cc-f3f9-4ce6-a9d6-f5cb45012a25',
-    keyId: '9AB47782V5',
+    keyId: 'AB8763YW8M',
     privateKey: fs.readFileSync(path.join(__dirname, 'AuthKey_AB8763YW8M.p8'), 'utf8')
 };
 
 // ✨ NEW: Direct, crash-proof connection to Apple
 function getAppleToken() {
-    return jwt.sign(
-        { iss: appleConfig.issuerId, aud: "appstoreconnect-v1" },
-        appleConfig.privateKey,
-        { algorithm: 'ES256', keyid: appleConfig.keyId, expiresIn: '15m' }
-    );
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+        iss: appleConfig.issuerId,
+        iat: now,
+        exp: now + 1199, // Safely under Apple's 20-minute maximum
+        aud: "appstoreconnect-v1"
+    };
+    
+    const signOptions = {
+        algorithm: 'ES256',
+        header: {
+            alg: 'ES256',
+            kid: appleConfig.keyId,
+            typ: 'JWT'
+        }
+    };
+    
+    return jwt.sign(payload, appleConfig.privateKey, signOptions);
 }
 
 const app = express();
