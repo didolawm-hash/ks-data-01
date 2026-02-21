@@ -17,33 +17,57 @@ const client = new MongoClient(uri);
 // 🚀 DIGITALOCEAN SPACES CONFIG
 // ==========================================
 const s3 = new AWS.S3({
-    endpoint: 'lon1.digitaloceanspaces.com',
+    // 🚨 ADDED "https://" TO PREVENT MISSING SLASH BUGS
+    endpoint: 'https://lon1.digitaloceanspaces.com',
     accessKeyId: 'DO00D6GRP9K2RAE873PZ',
     secretAccessKey: 'e4+QnmDLY1WkeWEsSjs260HVUXK1ShUqrrrYYmZ2PRU',
     region: 'lon1',
     signatureVersion: 'v4'
 });
 const SPACES_BUCKET = 'my-app-store';
+const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // ==========================================
-// 1. STORE API (FIXING ICONS & INSTALLS)
+// 1. PAGE ROUTES
+// ==========================================
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
+app.get('/rawakurdestore1664.html', (req, res) => res.sendFile(path.join(__dirname, 'rawakurdestore1664.html')));
+app.get('/store-designer.html', (req, res) => res.sendFile(path.join(__dirname, 'store-designer.html')));
+app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.html')));
+app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
+
+// ==========================================
+// 2. UDID & STATUS
+// ==========================================
+app.post('/', async (req, res) => {
+    try {
+        const body = req.body;
+        const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
+        const udid = udidMatch ? udidMatch[1] : null;
+        if (!udid) return res.status(400).send("UDID not found");
+        await client.connect();
+        await client.db("KurdeStore").collection("kurdestore_users").updateOne(
+            { udid: udid },
+            { $setOnInsert: { udid: udid, isPaid: false, reg_date: Date.now() } },
+            { upsert: true }
+        );
+        return res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
+    } catch (e) { res.status(500).send(e.message); }
+});
+
+// ==========================================
+// 🚀 3. THE APP MANAGER API (THE SLASH FIXER)
 // ==========================================
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
         
-        // 🛠️ GENERATE SIGNED URLS FOR EVERY APP
+        // Fix any old broken links dynamically before sending to Flutter
         const fixedApps = apps.map(app => {
-            // Fix Icon Link
-            if (app.iconKey) {
-                app.icon = s3.getSignedUrl('getObject', {
-                    Bucket: SPACES_BUCKET,
-                    Key: app.iconKey,
-                    Expires: 3600 // Valid for 1 hour
-                });
-            }
-            // Ensure Flutter sees 'info'
+            if (app.icon && app.icon.includes('.comicons/')) app.icon = app.icon.replace('.comicons/', '.com/icons/');
+            if (app.ipa && app.ipa.includes('.comapps/')) app.ipa = app.ipa.replace('.comapps/', '.com/apps/');
             app.info = app.info || app.subtitle || "";
             return app;
         });
@@ -70,17 +94,33 @@ app.post('/store-api', async (req, res) => {
         if (action === "save_item") {
             const appId = body.appId || body.bundleId;
             delete body.action;
-            // Clean data before saving
-            body.appId = appId;
-            body.bundleId = appId;
-            await appsCollection.updateOne({ appId: appId }, { $set: body }, { upsert: true });
+
+            // 🚨 Ensures the slash is perfectly placed between CDN and Folder
+            const safeIconKey = body.iconKey ? (body.iconKey.startsWith('/') ? body.iconKey.substring(1) : body.iconKey) : null;
+            const safeIpaKey = body.ipaKey ? (body.ipaKey.startsWith('/') ? body.ipaKey.substring(1) : body.ipaKey) : null;
+
+            const finalData = {
+                ...body,
+                appId: appId,
+                bundleId: appId,
+                info: body.info || body.subtitle || "", 
+                icon: safeIconKey ? `${CDN_URL}/${safeIconKey}` : body.icon,
+                ipa: safeIpaKey ? `${CDN_URL}/${safeIpaKey}` : body.ipa,
+                updatedAt: new Date().toISOString()
+            };
+
+            await appsCollection.updateOne({ appId: appId }, { $set: finalData }, { upsert: true });
             return res.json({ success: true });
         }
 
         if (action === "get_url") {
             const { fileName, fileType, contentType } = body;
-            const key = `${fileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
-            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType };
+            
+            // Fix double slash issues here too
+            const cleanFileType = fileType.endsWith('/') ? fileType.slice(0, -1) : fileType;
+            const key = `${cleanFileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
+            
+            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType, ACL: 'public-read' };
             const uploadUrl = s3.getSignedUrl('putObject', params);
             return res.json({ uploadUrl, key });
         }
@@ -99,71 +139,25 @@ app.post('/store-api', async (req, res) => {
 });
 
 // ==========================================
-// 2. PLIST GENERATOR (FIXING "UNABLE TO INSTALL")
+// 4. PLIST GENERATOR (CRITICAL FOR INSTALLS)
 // ==========================================
-app.get('/plist', async (req, res) => {
-    const { bundleId, name } = req.query;
-    try {
-        await client.connect();
-        const appData = await client.db("KurdeStore").collection("Apps").findOne({ appId: bundleId });
-        
-        if (!appData || !appData.ipaKey) return res.status(404).send("App file not found");
+app.get('/plist', (req, res) => {
+    let { ipaUrl, bundleId, name } = req.query;
+    
+    // Fix missing slash for IPA links
+    if (ipaUrl && ipaUrl.includes('.comapps/')) {
+        ipaUrl = ipaUrl.replace('.comapps/', '.com/apps/');
+    }
+    // Force CDN
+    if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
+        ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
+    }
 
-        // 🛠️ GENERATE VIP SIGNED LINK FOR THE IPA
-        const signedIpaUrl = s3.getSignedUrl('getObject', {
-            Bucket: SPACES_BUCKET,
-            Key: appData.ipaKey,
-            Expires: 1800 // 30 minutes
-        });
-
-        const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
+    const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>items</key>
-    <array>
-        <dict>
-            <key>assets</key>
-            <array>
-                <dict>
-                    <key>kind</key>
-                    <string>software-package</string>
-                    <key>url</key>
-                    <string><![CDATA[${signedIpaUrl}]]></string>
-                </dict>
-            </array>
-            <key>metadata</key>
-            <dict>
-                <key>bundle-identifier</key><string>${bundleId}</string>
-                <key>bundle-version</key><string>1.0</string>
-                <key>kind</key><string>software</string>
-                <key>title</key><string>${name}</string>
-            </dict>
-        </dict>
-    </array>
-</dict>
-</plist>`;
+<plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${ipaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
     res.set('Content-Type', 'text/xml');
     res.send(plistXml);
-    } catch (e) { res.status(500).send(e.message); }
-});
-
-// --- UDID ROUTES (REMAIN UNCHANGED) ---
-app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
-app.get('/rawakurdestore1664.html', (req, res) => res.sendFile(path.join(__dirname, 'rawakurdestore1664.html')));
-app.post('/', async (req, res) => {
-    try {
-        const body = req.body;
-        const udidMatch = body.match(/<key>UDID<\/key>\s*<string>([^<]+)<\/string>/);
-        const udid = udidMatch ? udidMatch[1] : null;
-        if (udid) {
-            await client.connect();
-            await client.db("KurdeStore").collection("kurdestore_users").updateOne(
-                { udid }, { $setOnInsert: { udid, isPaid: false, reg_date: Date.now() } }, { upsert: true }
-            );
-            res.redirect(301, `https://api.kurde.store/success.html?udid=${udid}`);
-        }
-    } catch (e) { res.status(500).send(e.message); }
 });
 
 const PORT = process.env.PORT || 8080;
