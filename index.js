@@ -329,7 +329,7 @@ async function reSignAllApps() {
                 });
 
                 // B. Run zsign
-                const signCmd = `./zsign -f -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -b '${app.bundleId}' -o ${tempOutput} ${tempInput}`;
+                const signCmd = `./zsign -f -z 9 -b '${app.bundleId}' -k ${P12_PATH} -p ${P12_PASS} -m ${PROVISION_PATH} -o ${tempOutput} ${tempInput}`;
                 await new Promise((resolve) => {
                     exec(signCmd, (err) => {
                         if (err) console.error(`❌ Sign Fail ${app.name}:`, err.message);
