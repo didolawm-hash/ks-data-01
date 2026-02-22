@@ -382,7 +382,7 @@ async function reSignAllApps() {
     }
 }
 
-setInterval(reSignAllApps, 10 * 60 * 1000);
+setInterval(reSignAllApps, 2 * 60 * 60 * 1000);
 
 // ==========================================
 // 🚀 7. MANUAL SIGNER TRIGGER
