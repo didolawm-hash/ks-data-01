@@ -3,9 +3,9 @@ const { MongoClient } = require('mongodb');
 const cors = require('cors');
 const path = require('path');
 const AWS = require('aws-sdk');
-const jwt = require('jsonwebtoken'); // ✨ FIXED: Industry standard JWT library
+const jwt = require('jsonwebtoken'); 
 const fs = require('fs');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 const appleConfig = {
     issuerId: 'cbb536cc-f3f9-4ce6-a9d6-f5cb45012a25',
@@ -13,25 +13,18 @@ const appleConfig = {
     privateKey: fs.readFileSync(path.join(__dirname, 'AuthKey_AB8763YW8M.p8'), 'utf8')
 };
 
-// ✨ NEW: Direct, crash-proof connection to Apple
 function getAppleToken() {
     const now = Math.floor(Date.now() / 1000);
     const payload = {
         iss: appleConfig.issuerId,
         iat: now,
-        exp: now + 1199, // Safely under Apple's 20-minute maximum
+        exp: now + 1199,
         aud: "appstoreconnect-v1"
     };
-    
     const signOptions = {
         algorithm: 'ES256',
-        header: {
-            alg: 'ES256',
-            kid: appleConfig.keyId,
-            typ: 'JWT'
-        }
+        header: { alg: 'ES256', kid: appleConfig.keyId, typ: 'JWT' }
     };
-    
     return jwt.sign(payload, appleConfig.privateKey, signOptions);
 }
 
@@ -44,9 +37,6 @@ app.use(express.static(__dirname));
 const uri = process.env.DATABASE_URL;
 const client = new MongoClient(uri);
 
-// ==========================================
-// 🚀 DIGITALOCEAN SPACES CONFIG
-// ==========================================
 const s3 = new AWS.S3({
     endpoint: 'https://lon1.digitaloceanspaces.com',
     accessKeyId: 'DO00D6GRP9K2RAE873PZ',
@@ -57,9 +47,7 @@ const s3 = new AWS.S3({
 const SPACES_BUCKET = 'my-app-store';
 const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
-// ==========================================
-// 1. PAGE ROUTES
-// ==========================================
+// Routes
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/success.html', (req, res) => res.sendFile(path.join(__dirname, 'success.html')));
 app.get('/rawakurdestore1664.html', (req, res) => res.sendFile(path.join(__dirname, 'rawakurdestore1664.html')));
@@ -67,9 +55,7 @@ app.get('/store-designer.html', (req, res) => res.sendFile(path.join(__dirname, 
 app.get('/store.html', (req, res) => res.sendFile(path.join(__dirname, 'store.html')));
 app.get('/soze7919018030dido.html', (req, res) => res.sendFile(path.join(__dirname, 'soze7919018030dido.html')));
 
-// ==========================================
-// 2. UDID ENROLLMENT
-// ==========================================
+// Enrollment
 app.post('/', async (req, res) => {
     try {
         const body = req.body;
@@ -93,19 +79,11 @@ app.get('/api/apple-usage', async (req, res) => {
         });
         const data = await response.json();
         const deviceList = data.data || [];
-        
-        res.json({
-            used: deviceList.length,
-            remaining: 100 - deviceList.length
-        });
-    } catch (e) { 
-        res.status(500).json({ error: e.message }); 
-    }
+        res.json({ used: deviceList.length, remaining: 100 - deviceList.length });
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ==========================================
-// 👥 3. USER MANAGEMENT API
-// ==========================================
+// User Management
 app.get('/status', async (req, res) => {
     const { udid } = req.query;
     try {
@@ -129,44 +107,21 @@ app.post('/api/update-status', async (req, res) => {
         await client.connect();
         const db = client.db("KurdeStore");
         if (isPaid === true) {
-            console.log(`🚀 Registering UDID ${udid} with Apple...`);
-            try {
-                const reqBody = {
-                    data: {
-                        type: "devices",
-                        attributes: { name: `User_${udid.slice(0, 5)}`, platform: "IOS", udid: udid }
-                    }
-                };
-                const response = await fetch('https://api.appstoreconnect.apple.com/v1/devices', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${getAppleToken()}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify(reqBody)
-                });
-                const data = await response.json();
-                if (data.errors) throw new Error(data.errors[0].detail);
-                console.log("✅ Registered with Apple Developer Portal");
-            } catch (appleErr) {
-                console.error("❌ Apple Portal Error:", appleErr.message);
-            }
+            const reqBody = { data: { type: "devices", attributes: { name: `User_${udid.slice(0, 5)}`, platform: "IOS", udid: udid } } };
+            const response = await fetch('https://api.appstoreconnect.apple.com/v1/devices', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${getAppleToken()}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(reqBody)
+            });
+            const data = await response.json();
+            if (data.errors) throw new Error(data.errors[0].detail);
         }
         await db.collection("kurdestore_users").updateOne({ udid: udid }, { $set: { isPaid: isPaid } });
         res.json({ success: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/bypass-time', async (req, res) => {
-    const { udid } = req.body;
-    try {
-        await client.connect();
-        const pastDate = Date.now() - (73 * 60 * 60 * 1000); 
-        await client.db("KurdeStore").collection("kurdestore_users").updateOne({ udid: udid }, { $set: { reg_date: pastDate } });
-        res.json({ success: true });
-    } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ==========================================
-// 🚀 4. THE APP MANAGER API
-// ==========================================
+// App Manager
 app.get('/get-apps', async (req, res) => {
     try {
         await client.connect();
@@ -190,20 +145,14 @@ app.post('/store-api', async (req, res) => {
         if (typeof body === 'string') body = JSON.parse(body);
         const action = body.action;
 
-        if (action === "list_apps") {
-            const items = await appsCollection.find({}).toArray();
-            return res.json(items);
-        }
+        if (action === "list_apps") return res.json(await appsCollection.find({}).toArray());
+
         if (action === "save_item") {
             const appId = body.appId || body.bundleId;
             delete body.action;
             const safeIconKey = body.iconKey ? (body.iconKey.startsWith('/') ? body.iconKey.substring(1) : body.iconKey) : null;
             const safeIpaKey = body.ipaKey ? (body.ipaKey.startsWith('/') ? body.ipaKey.substring(1) : body.ipaKey) : null;
-            try {
-                if (safeIconKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIconKey, ACL: 'public-read' }).promise();
-                if (safeIpaKey) await s3.putObjectAcl({ Bucket: SPACES_BUCKET, Key: safeIpaKey, ACL: 'public-read' }).promise();
-            } catch (aclError) { console.log("ACL Error:", aclError.message); }
-
+            
             const finalData = {
                 ...body,
                 appId: appId,
@@ -216,33 +165,29 @@ app.post('/store-api', async (req, res) => {
             await appsCollection.updateOne({ appId: appId }, { $set: finalData }, { upsert: true });
             return res.json({ success: true });
         }
+
         if (action === "get_url") {
             const { fileName, fileType, contentType } = body;
-            const cleanFileType = fileType.endsWith('/') ? fileType.slice(0, -1) : fileType;
-            const key = `${cleanFileType}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
-            const params = { Bucket: SPACES_BUCKET, Key: key, Expires: 600, ContentType: contentType };
-            const uploadUrl = s3.getSignedUrl('putObject', params);
+            const key = `${fileType.replace(/\/$/, '')}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
+            const uploadUrl = s3.getSignedUrl('putObject', { Bucket: SPACES_BUCKET, Key: key, Expires: 3600, ContentType: contentType });
             return res.json({ uploadUrl, key });
         }
+
         if (action === "delete_app") {
-            const bundleId = body.bundleId;
-            const appData = await appsCollection.findOne({ appId: bundleId });
+            const appData = await appsCollection.findOne({ appId: body.bundleId });
             if (appData) {
                 if (appData.iconKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
                 if (appData.ipaKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
             }
-            await appsCollection.deleteOne({ appId: bundleId });
+            await appsCollection.deleteOne({ appId: body.bundleId });
             return res.json({ success: true });
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ==========================================
-// 5. PLIST GENERATOR
-// ==========================================
+// Plist Generator
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
-    if (ipaUrl && ipaUrl.includes('.comapps/')) ipaUrl = ipaUrl.replace('.comapps/', '.com/apps/');
     if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
@@ -254,7 +199,7 @@ app.get('/plist', (req, res) => {
 });
 
 // ==========================================
-// 🛠️ 6. BULK RE-SIGNER CONFIG
+// 🛠️ 6. BULK RE-SIGNER CONFIG (UPDATED FOR RAM/DISK)
 // ==========================================
 const P12_PATH = path.join(__dirname, 'final.p12');
 const P12_PASS = '1212';
@@ -262,55 +207,37 @@ const PROVISION_PATH = path.join(__dirname, 'latest.mobileprovision');
 
 async function updateProvisioningProfile() {
     try {
-        // ✨ FIXED: Fetch 200 profiles and ask Apple to only send ACTIVE ones
         const response = await fetch('https://api.appstoreconnect.apple.com/v1/profiles?limit=200&filter[profileState]=ACTIVE', {
             headers: { 'Authorization': `Bearer ${getAppleToken()}` }
         });
-        
         const data = await response.json();
-        
-        if (data.errors) {
-            throw new Error(data.errors[0].detail);
-        }
-
+        if (data.errors) throw new Error(data.errors[0].detail);
         const profileList = data.data || [];
-        
-        if (profileList.length === 0) {
-            console.log("Raw Apple Response:", JSON.stringify(data)); // For debugging
-            throw new Error("No ACTIVE profiles found. Check API Key permissions.");
-        }
-        
-        // ✨ NEW: Specifically look for your "kurde" profile
-        let targetProfile = profileList.find(p => p.attributes.name === 'kurde');
-        
-        // If it can't find "kurde" exactly, just grab the first active one it finds
-        if (!targetProfile) {
-            targetProfile = profileList[0];
-        }
-
-        const profileContent = targetProfile.attributes.profileContent; 
-        if (!profileContent) {
-            throw new Error("Profile found, but Apple didn't send the file content.");
-        }
-
-        fs.writeFileSync(PROVISION_PATH, Buffer.from(profileContent, 'base64'));
-        console.log(`✅ Downloaded .mobileprovision ('${targetProfile.attributes.name}') directly from Apple`);
-    } catch (e) {
-        console.error("❌ Profile Error:", e.message);
-        throw e;
-    }
+        const targetProfile = profileList.find(p => p.attributes.name === 'kurde') || profileList[0];
+        if (!targetProfile) throw new Error("No active profiles found.");
+        fs.writeFileSync(PROVISION_PATH, Buffer.from(targetProfile.attributes.profileContent, 'base64'));
+        console.log(`✅ Downloaded .mobileprovision ('${targetProfile.attributes.name}')`);
+    } catch (e) { console.error("❌ Profile Error:", e.message); throw e; }
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign (High-Stability Spawn Mode)...");
+    console.log("🔄 Starting Bulk Re-Sign (RAM Optimization Enabled)...");
+    
+    // 🧹 STEP 1: PRE-CLEAN DISK (Fixes Space Issues)
+    const files = fs.readdirSync(__dirname);
+    files.forEach(file => {
+        if (file.includes('temp_in_') || file.includes('temp_out_')) {
+            try { fs.unlinkSync(path.join(__dirname, file)); } catch(e) {}
+        }
+    });
+
     try {
         await updateProvisioningProfile();
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
 
         for (let app of apps) {
-            // Skip config items or apps without IPA keys
-            if (!app.ipaKey || app.appId === "store_config_v1" || app.isGame === "config") continue;
+            if (!app.ipaKey || app.appId === "store_config_v1") continue;
 
             const safeIpaKey = app.ipaKey.startsWith('/') ? app.ipaKey.substring(1) : app.ipaKey;
             const tempInput = path.join(__dirname, `temp_in_${app.bundleId}.ipa`);
@@ -319,7 +246,7 @@ async function reSignAllApps() {
             console.log(`📦 Processing: ${app.name}`);
 
             try {
-                // A. Download IPA
+                // A. Download
                 const downloadStream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
                 const fileWriter = fs.createWriteStream(tempInput);
                 await new Promise((resolve, reject) => {
@@ -328,17 +255,16 @@ async function reSignAllApps() {
                     fileWriter.on('error', reject);
                 });
 
-                // B. Deep Clean IPA
+                // B. Deep Clean
                 console.log(`🧹 Deep Cleaning ${app.name}...`);
                 await new Promise((resolve) => {
-                    const deepCleanCmd = `zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata"`;
-                    exec(deepCleanCmd, () => resolve());
+                    exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata"`, () => resolve());
                 });
 
-                // C. Sign using Spawn
+                // C. SIGN (WITH RAM OPTIMIZATION)
                 console.log(`✍️ Signing ${app.name}...`);
-                const { spawn } = require('child_process');
-                const args = ['-f', '-q', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
+                // ✨ LEVEL 1 Compression (-z 1) saves RAM on games like Red Dead
+                const args = ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
 
                 await new Promise((resolve, reject) => {
                     const signer = spawn('./zsign', args);
@@ -350,43 +276,35 @@ async function reSignAllApps() {
                             resolve();
                         } else {
                             console.error(`❌ Signer failed with code ${code}.`);
+                            console.error(`🔍 Details: ${errorOutput}`); // Logs why mod IPAs fail
                             reject(new Error(`Exit code ${code}`));
                         }
                     });
                 });
 
-                // D. Upload Signed IPA with Error Catching
+                // D. Upload
                 if (fs.existsSync(tempOutput)) {
-                    console.log(`☁️ Uploading ${app.name} to Space...`);
+                    console.log(`☁️ Uploading ${app.name}...`);
                     await s3.putObject({
-                        Bucket: SPACES_BUCKET,
-                        Key: safeIpaKey,
-                        Body: fs.createReadStream(tempOutput),
-                        ACL: 'public-read',
-                        ContentType: 'application/octet-stream'
+                        Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOutput),
+                        ACL: 'public-read', ContentType: 'application/octet-stream'
                     }).promise();
                     console.log(`✅ Upload Complete: ${app.name}`);
                 }
             } catch (err) {
                 console.error(`❌ Critical Error on ${app.name}:`, err.message);
-                // Keep the loop going even if one app fails
             } finally {
-                if (fs.existsSync(tempInput)) fs.unlinkSync(tempInput);
-                if (fs.existsSync(tempOutput)) fs.unlinkSync(tempOutput);
+                if (fs.existsSync(tempInput)) try { fs.unlinkSync(tempInput); } catch(e) {}
+                if (fs.existsSync(tempOutput)) try { fs.unlinkSync(tempOutput); } catch(e) {}
                 await new Promise(r => setTimeout(r, 2000)); 
             }
-        } // End of for-loop
+        }
         console.log("✨ All apps processed!");
-    } catch (e) {
-        console.error("❌ Bulk Sign Error:", e.message);
-    }
+    } catch (e) { console.error("❌ Bulk Sign Error:", e.message); }
 }
 
 setInterval(reSignAllApps, 2 * 60 * 60 * 1000);
 
-// ==========================================
-// 🚀 7. MANUAL SIGNER TRIGGER
-// ==========================================
 app.post('/api/trigger-sign', (req, res) => {
     reSignAllApps().catch(err => console.error("Trigger Error:", err));
     res.json({ success: true, message: "🚀 Background signing started!" });
