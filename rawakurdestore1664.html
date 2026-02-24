@@ -101,6 +101,13 @@
         if (!file) return;
         
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
+        
+        // ✨ THE FIX: Stop JSZip from crashing the browser on huge files (over 300MB)
+        if (file.size > 300 * 1024 * 1024) {
+            updateStatus("⚠️ App is huge! Auto-Detect skipped to prevent crash. Please type Bundle ID manually.");
+            return; // Stops here, prevents the crash
+        }
+
         updateStatus("Scanning IPA for Bundle ID...");
 
         try {
