@@ -221,9 +221,9 @@ async function updateProvisioningProfile() {
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign (RAM Optimization Enabled)...");
+    console.log("🔄 Starting Bulk Re-Sign (Ultra-Stability Mode)...");
     
-    // 🧹 STEP 1: PRE-CLEAN DISK (Fixes Space Issues)
+    // 🧹 Pre-Clean Disk
     const files = fs.readdirSync(__dirname);
     files.forEach(file => {
         if (file.includes('temp_in_') || file.includes('temp_out_')) {
@@ -255,31 +255,26 @@ async function reSignAllApps() {
                     fileWriter.on('error', reject);
                 });
 
-                // B. Deep Clean
-                console.log(`🧹 Deep Cleaning ${app.name}...`);
-                await new Promise((resolve) => {
-                    exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata"`, () => resolve());
-                });
+                const stats = fs.statSync(tempInput);
+                const fileSizeInGB = stats.size / (1024 * 1024 * 1024);
 
-                // C. SIGN (WITH RAM OPTIMIZATION)
+                // B. Safe Deep Clean (Only for apps under 1GB)
+                if (fileSizeInGB < 1.0) {
+                    console.log(`🧹 Deep Cleaning ${app.name}...`);
+                    await new Promise((resolve) => {
+                        exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata" || true`, () => resolve());
+                    });
+                } else {
+                    console.log(`⏩ Skipping Deep Clean for ${app.name} (Size: ${fileSizeInGB.toFixed(2)}GB) to save RAM.`);
+                }
+
+                // C. Sign
                 console.log(`✍️ Signing ${app.name}...`);
-                // ✨ LEVEL 1 Compression (-z 1) saves RAM on games like Red Dead
                 const args = ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
 
                 await new Promise((resolve, reject) => {
                     const signer = spawn('./zsign', args);
-                    let errorOutput = '';
-                    signer.stderr.on('data', (data) => { errorOutput += data.toString(); });
-                    signer.on('close', (code) => {
-                        if (code === 0) {
-                            console.log(`✅ Successfully Signed: ${app.name}`);
-                            resolve();
-                        } else {
-                            console.error(`❌ Signer failed with code ${code}.`);
-                            console.error(`🔍 Details: ${errorOutput}`); // Logs why mod IPAs fail
-                            reject(new Error(`Exit code ${code}`));
-                        }
-                    });
+                    signer.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}`)));
                 });
 
                 // D. Upload
@@ -296,10 +291,10 @@ async function reSignAllApps() {
             } finally {
                 if (fs.existsSync(tempInput)) try { fs.unlinkSync(tempInput); } catch(e) {}
                 if (fs.existsSync(tempOutput)) try { fs.unlinkSync(tempOutput); } catch(e) {}
-                await new Promise(r => setTimeout(r, 2000)); 
+                // Give the server 5 seconds to "breathe" between huge apps
+                await new Promise(r => setTimeout(r, 5000)); 
             }
         }
-        console.log("✨ All apps processed!");
     } catch (e) { console.error("❌ Bulk Sign Error:", e.message); }
 }
 
