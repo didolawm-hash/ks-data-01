@@ -117,7 +117,9 @@
 
             const zip = await JSZip.loadAsync(file);
             // Search for Info.plist inside the Payload folder
-            const plistFile = Object.keys(zip.files).find(path => path.match(/Payload\/[^\/]+\.app\/Info\.plist$/));
+            const plistFile = Object.keys(zip.files).find(path => 
+    path.includes(".app/Info.plist") && !path.includes("__MACOSX")
+);
             
             if (plistFile && !isEditing) {
                 const content = await zip.files[plistFile].async("string");
