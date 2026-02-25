@@ -173,43 +173,30 @@ app.post('/store-api', async (req, res) => {
             return res.json({ uploadUrl, key });
         }
 
-       if (action === "delete_app") {
-    // 1. Search using both appId and bundleId to be 100% sure we find the record
-    const appData = await appsCollection.findOne({ 
-        $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
-    });
+        if (action === "delete_app") {
+            const appData = await appsCollection.findOne({ 
+                $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
+            });
 
-    if (appData) {
-        console.log(`🗑️ Storage Cleanup for: ${appData.name}`);
-        
-        // 2. Clean the keys (remove leading slashes if they exist)
-        const cleanIconKey = appData.iconKey ? appData.iconKey.replace(/^\/+/, '') : null;
-        const cleanIpaKey = appData.ipaKey ? appData.ipaKey.replace(/^\/+/, '') : null;
+            if (appData) {
+                console.log(`🗑️ Storage Cleanup for: ${appData.name}`);
+                const cleanIconKey = appData.iconKey ? appData.iconKey.replace(/^\/+/, '') : null;
+                const cleanIpaKey = appData.ipaKey ? appData.ipaKey.replace(/^\/+/, '') : null;
 
-        // 3. Delete Icon
-        if (cleanIconKey) {
-            await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIconKey }).promise()
-                .then(() => console.log("✅ Icon deleted"))
-                .catch(err => console.error("❌ Icon delete failed:", err.message));
+                if (cleanIconKey) {
+                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIconKey }).promise().catch(e => console.log("Icon delete skip"));
+                }
+                if (cleanIpaKey) {
+                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIpaKey }).promise().catch(e => console.log("IPA delete skip"));
+                }
+            }
+            await appsCollection.deleteOne({ $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] });
+            return res.json({ success: true });
         }
-
-        // 4. Delete IPA
-        if (cleanIpaKey) {
-            await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIpaKey }).promise()
-                .then(() => console.log("✅ IPA deleted"))
-                .catch(err => console.error("❌ IPA delete failed:", err.message));
-        }
-    } else {
-        console.log("⚠️ No app found in database with ID:", body.bundleId);
+    } catch (e) { 
+        console.error("Store API Error:", e.message);
+        res.status(500).json({ error: e.message }); 
     }
-
-    // 5. Delete from Database
-    await appsCollection.deleteOne({ 
-        $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
-    });
-    
-    return res.json({ success: true });
-}
 });
 
 // Plist Generator
@@ -226,7 +213,7 @@ app.get('/plist', (req, res) => {
 });
 
 // ==========================================
-// 🛠️ 6. BULK RE-SIGNER CONFIG (UPDATED FOR RAM/DISK & MASTER APP)
+// 🛠️ 6. BULK RE-SIGNER CONFIG
 // ==========================================
 const P12_PATH = path.join(__dirname, 'final.p12');
 const P12_PASS = '1212';
@@ -238,7 +225,6 @@ async function updateProvisioningProfile() {
             headers: { 'Authorization': `Bearer ${getAppleToken()}` }
         });
         const data = await response.json();
-        if (data.errors) throw new Error(data.errors[0].detail);
         const profileList = data.data || [];
         const targetProfile = profileList.find(p => p.attributes.name === 'kurde') || profileList[0];
         if (!targetProfile) throw new Error("No active profiles found.");
@@ -262,9 +248,7 @@ async function reSignAllApps() {
         await updateProvisioningProfile();
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
-
-        // 🆔 ADD YOUR STORE'S BUNDLE ID HERE! (Ensure this matches MongoDB exactly)
-        const MASTER_BUNDLE_ID = "com.example.ikurdApp"; 
+        const MASTER_BUNDLE_ID = "com.kurde.store"; // Update this to your Store's actual Bundle ID
 
         for (let app of apps) {
             if (!app.ipaKey || app.appId === "store_config_v1") continue;
@@ -289,15 +273,14 @@ async function reSignAllApps() {
                 const fileSizeInGB = stats.size / (1024 * 1024 * 1024);
                 const isMasterApp = app.bundleId === MASTER_BUNDLE_ID;
 
-                // B. Safe Deep Clean (Skips Huge Apps AND Master App)
+                // B. Safe Clean
                 if (fileSizeInGB < 1.0 && !isMasterApp) {
                     console.log(`🧹 Deep Cleaning ${app.name}...`);
                     await new Promise((resolve) => {
                         exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata" || true`, () => resolve());
                     });
                 } else {
-                    const reason = isMasterApp ? "Master Store App" : `Size: ${fileSizeInGB.toFixed(2)}GB`;
-                    console.log(`⏩ Skipping Deep Clean for ${app.name} (${reason}).`);
+                    console.log(`⏩ Skipping Deep Clean for ${app.name}.`);
                 }
 
                 // C. Sign
@@ -307,7 +290,7 @@ async function reSignAllApps() {
                 await new Promise((resolve, reject) => {
                     const signer = spawn('./zsign', args);
                     let errOut = '';
-                    signer.stderr.on('data', d => errOut += d.toString()); // Capture actual error message
+                    signer.stderr.on('data', d => errOut += d.toString());
                     signer.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}: ${errOut}`)));
                 });
 
@@ -325,7 +308,6 @@ async function reSignAllApps() {
             } finally {
                 if (fs.existsSync(tempInput)) try { fs.unlinkSync(tempInput); } catch(e) {}
                 if (fs.existsSync(tempOutput)) try { fs.unlinkSync(tempOutput); } catch(e) {}
-                // Give the server 5 seconds to "breathe" between apps
                 await new Promise(r => setTimeout(r, 5000)); 
             }
         }
