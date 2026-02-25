@@ -173,16 +173,43 @@ app.post('/store-api', async (req, res) => {
             return res.json({ uploadUrl, key });
         }
 
-        if (action === "delete_app") {
-            const appData = await appsCollection.findOne({ appId: body.bundleId });
-            if (appData) {
-                if (appData.iconKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.iconKey }).promise();
-                if (appData.ipaKey) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: appData.ipaKey }).promise();
-            }
-            await appsCollection.deleteOne({ appId: body.bundleId });
-            return res.json({ success: true });
+       if (action === "delete_app") {
+    // 1. Search using both appId and bundleId to be 100% sure we find the record
+    const appData = await appsCollection.findOne({ 
+        $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
+    });
+
+    if (appData) {
+        console.log(`🗑️ Storage Cleanup for: ${appData.name}`);
+        
+        // 2. Clean the keys (remove leading slashes if they exist)
+        const cleanIconKey = appData.iconKey ? appData.iconKey.replace(/^\/+/, '') : null;
+        const cleanIpaKey = appData.ipaKey ? appData.ipaKey.replace(/^\/+/, '') : null;
+
+        // 3. Delete Icon
+        if (cleanIconKey) {
+            await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIconKey }).promise()
+                .then(() => console.log("✅ Icon deleted"))
+                .catch(err => console.error("❌ Icon delete failed:", err.message));
         }
-    } catch (e) { res.status(500).json({ error: e.message }); }
+
+        // 4. Delete IPA
+        if (cleanIpaKey) {
+            await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIpaKey }).promise()
+                .then(() => console.log("✅ IPA deleted"))
+                .catch(err => console.error("❌ IPA delete failed:", err.message));
+        }
+    } else {
+        console.log("⚠️ No app found in database with ID:", body.bundleId);
+    }
+
+    // 5. Delete from Database
+    await appsCollection.deleteOne({ 
+        $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
+    });
+    
+    return res.json({ success: true });
+}
 });
 
 // Plist Generator
