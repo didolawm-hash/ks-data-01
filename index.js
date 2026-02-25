@@ -237,7 +237,7 @@ async function reSignAllApps() {
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
 
         // 🆔 ADD YOUR STORE'S BUNDLE ID HERE! (Ensure this matches MongoDB exactly)
-        const MASTER_BUNDLE_ID = "com.kurde.store"; 
+        const MASTER_BUNDLE_ID = "com.example.ikurdApp"; 
 
         for (let app of apps) {
             if (!app.ipaKey || app.appId === "store_config_v1") continue;
