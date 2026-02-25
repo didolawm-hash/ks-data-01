@@ -199,7 +199,7 @@ app.get('/plist', (req, res) => {
 });
 
 // ==========================================
-// 🛠️ 6. BULK RE-SIGNER CONFIG (UPDATED FOR RAM/DISK)
+// 🛠️ 6. BULK RE-SIGNER CONFIG (UPDATED FOR RAM/DISK & MASTER APP)
 // ==========================================
 const P12_PATH = path.join(__dirname, 'final.p12');
 const P12_PASS = '1212';
@@ -236,6 +236,9 @@ async function reSignAllApps() {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
 
+        // 🆔 ADD YOUR STORE'S BUNDLE ID HERE! (Ensure this matches MongoDB exactly)
+        const MASTER_BUNDLE_ID = "com.kurde.store"; 
+
         for (let app of apps) {
             if (!app.ipaKey || app.appId === "store_config_v1") continue;
 
@@ -243,7 +246,7 @@ async function reSignAllApps() {
             const tempInput = path.join(__dirname, `temp_in_${app.bundleId}.ipa`);
             const tempOutput = path.join(__dirname, `temp_out_${app.bundleId}.ipa`);
 
-            console.log(`📦 Processing: ${app.name}`);
+            console.log(`📦 Processing: ${app.name} (${app.bundleId})`);
 
             try {
                 // A. Download
@@ -257,15 +260,17 @@ async function reSignAllApps() {
 
                 const stats = fs.statSync(tempInput);
                 const fileSizeInGB = stats.size / (1024 * 1024 * 1024);
+                const isMasterApp = app.bundleId === MASTER_BUNDLE_ID;
 
-                // B. Safe Deep Clean (Only for apps under 1GB)
-                if (fileSizeInGB < 1.0) {
+                // B. Safe Deep Clean (Skips Huge Apps AND Master App)
+                if (fileSizeInGB < 1.0 && !isMasterApp) {
                     console.log(`🧹 Deep Cleaning ${app.name}...`);
                     await new Promise((resolve) => {
                         exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata" || true`, () => resolve());
                     });
                 } else {
-                    console.log(`⏩ Skipping Deep Clean for ${app.name} (Size: ${fileSizeInGB.toFixed(2)}GB) to save RAM.`);
+                    const reason = isMasterApp ? "Master Store App" : `Size: ${fileSizeInGB.toFixed(2)}GB`;
+                    console.log(`⏩ Skipping Deep Clean for ${app.name} (${reason}).`);
                 }
 
                 // C. Sign
@@ -274,7 +279,9 @@ async function reSignAllApps() {
 
                 await new Promise((resolve, reject) => {
                     const signer = spawn('./zsign', args);
-                    signer.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}`)));
+                    let errOut = '';
+                    signer.stderr.on('data', d => errOut += d.toString()); // Capture actual error message
+                    signer.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}: ${errOut}`)));
                 });
 
                 // D. Upload
@@ -291,7 +298,7 @@ async function reSignAllApps() {
             } finally {
                 if (fs.existsSync(tempInput)) try { fs.unlinkSync(tempInput); } catch(e) {}
                 if (fs.existsSync(tempOutput)) try { fs.unlinkSync(tempOutput); } catch(e) {}
-                // Give the server 5 seconds to "breathe" between huge apps
+                // Give the server 5 seconds to "breathe" between apps
                 await new Promise(r => setTimeout(r, 5000)); 
             }
         }
