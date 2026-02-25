@@ -46,6 +46,8 @@
         <input type="hidden" id="originalIpaKey">
         <input type="hidden" id="originalIconKey">
         <input type="hidden" id="originalFullIconUrl"> 
+        <input type="hidden" id="originalFullIpaUrl"> 
+
         <span class="label">Files</span>
         <div id="iconInputContainer">
             <input type="file" id="iconFile" accept="image/*" placeholder="Icon (Optional on Update)">
@@ -88,7 +90,7 @@
     const API_URL = "https://api.kurde.store/store-api";
     const S3_BASE_URL = "https://my-app-store.lon1.digitaloceanspaces.com";
     
-    // 🚨 FIX 2: Built-in safe SVG image. No more via.placeholder.com errors!
+    // Built-in safe SVG placeholder image.
     const SAFE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1NSIgaGVpZ2h0PSI1NSIgdmlld0JveD0iMCAwIDU1IDU1Ij48cmVjdCB3aWR0aD0iNTUiIGhlaWdodD0iNTUiIGZpbGw9IiMzMzMiIHJ4PSIxMiIvPjx0ZXh0IHg9IjI3LjUiIHk9IjMzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXBwPC90ZXh0Pjwvc3ZnPg==';
 
     let allData = [];
@@ -102,29 +104,24 @@
         
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
         
-        // ✨ THE FIX: Stop JSZip from crashing the browser on huge files (over 300MB)
         if (file.size > 300 * 1024 * 1024) {
             updateStatus("⚠️ App is huge! Auto-Detect skipped to prevent crash. Please type Bundle ID manually.");
-            return; // Stops here, prevents the crash
+            return; 
         }
 
         updateStatus("Scanning IPA for Bundle ID...");
 
         try {
-            if (typeof JSZip === 'undefined') {
-                throw new Error("JSZip failed to load. Ad-blocker might be active.");
-            }
+            if (typeof JSZip === 'undefined') throw new Error("JSZip failed to load. Ad-blocker might be active.");
 
             const zip = await JSZip.loadAsync(file);
-            // Search for Info.plist inside the Payload folder
             const plistFile = Object.keys(zip.files).find(path => 
-    path.includes(".app/Info.plist") && !path.includes("__MACOSX")
-);
+                path.includes(".app/Info.plist") && !path.includes("__MACOSX")
+            );
             
             if (plistFile && !isEditing) {
                 const content = await zip.files[plistFile].async("string");
                 
-                // Extract using Regex
                 let bMatch = content.match(/<key>CFBundleIdentifier<\/key>[\s\S]*?<string>(.*?)<\/string>/);
                 let vMatch = content.match(/<key>CFBundleShortVersionString<\/key>[\s\S]*?<string>(.*?)<\/string>/);
                 let nMatch = content.match(/<key>CFBundleDisplayName<\/key>[\s\S]*?<string>(.*?)<\/string>/) || content.match(/<key>CFBundleName<\/key>[\s\S]*?<string>(.*?)<\/string>/);
@@ -160,19 +157,15 @@
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
             let oldIconUrl = document.getElementById('originalFullIconUrl').value;
+            let oldIpaUrl = document.getElementById('originalFullIpaUrl').value;
 
             let finalIconUrl = "";
-            
             if (iconFile) {
                 updateStatus("Uploading New Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
                 finalIconUrl = S3_BASE_URL + "/" + iconKey;
             } else {
-                if (iconKey) {
-                    finalIconUrl = S3_BASE_URL + "/" + iconKey;
-                } else {
-                    finalIconUrl = oldIconUrl;
-                }
+                finalIconUrl = iconKey ? (S3_BASE_URL + "/" + iconKey) : oldIconUrl;
             }
 
             let finalIpaUrl = "";
@@ -181,7 +174,7 @@
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
                 finalIpaUrl = S3_BASE_URL + "/" + ipaKey;
             } else {
-                if (ipaKey) finalIpaUrl = S3_BASE_URL + "/" + ipaKey;
+                finalIpaUrl = ipaKey ? (S3_BASE_URL + "/" + ipaKey) : oldIpaUrl;
             }
 
             const payload = {
@@ -202,7 +195,7 @@
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
 
-            updateStatus("✅ App Updated Successfully!");
+            updateStatus("✅ App Saved Successfully!");
             setTimeout(() => location.reload(), 1500);
         } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
     }
@@ -246,7 +239,6 @@
             const card = document.createElement('div');
             card.className = 'app-item';
             
-            // Apply Safe Placeholder here
             let iconSrc = item.icon || (item.iconKey ? (S3_BASE_URL + "/" + item.iconKey) : SAFE_PLACEHOLDER);
             const itemString = encodeURIComponent(JSON.stringify(item));
 
@@ -255,7 +247,7 @@
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-subtitle">${item.info || ''}</div> 
-                    <div class="app-meta">${item.version} • ${item.size || 'Unknown'}</div>
+                    <div class="app-meta">${item.version || '1.0'} • ${item.size || 'Unknown'}</div>
                 </div>
                 <div class="btn-group">
                     <button onclick="editApp('${itemString}')" class="edit-btn">Edit</button>
@@ -286,11 +278,12 @@
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
         document.getElementById('originalFullIconUrl').value = item.icon || ""; 
+        document.getElementById('originalFullIpaUrl').value = item.ipa || ""; 
 
         document.getElementById('bundleId').readOnly = true;
         document.getElementById('bundleId').style.opacity = "0.6";
         
-        updateStatus("⚠️ Update Mode: Just upload new IPA to update.");
+        updateStatus("⚠️ Update Mode: Edit metadata or upload new files to overwrite.");
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
