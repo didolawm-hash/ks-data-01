@@ -45,7 +45,6 @@ const s3 = new AWS.S3({
     signatureVersion: 'v4'
 });
 const SPACES_BUCKET = 'my-app-store';
-const CDN_URL = "https://my-app-store.lon1.cdn.digitaloceanspaces.com";
 
 // Routes
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -127,8 +126,6 @@ app.get('/get-apps', async (req, res) => {
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
         const fixedApps = apps.map(app => {
-            if (app.icon && app.icon.includes('.comicons/')) app.icon = app.icon.replace('.comicons/', '.com/icons/');
-            if (app.ipa && app.ipa.includes('.comapps/')) app.ipa = app.ipa.replace('.comapps/', '.com/apps/');
             app.info = app.info || app.subtitle || "";
             return app;
         });
@@ -150,16 +147,11 @@ app.post('/store-api', async (req, res) => {
         if (action === "save_item") {
             const appId = body.appId || body.bundleId;
             delete body.action;
-            const safeIconKey = body.iconKey ? (body.iconKey.startsWith('/') ? body.iconKey.substring(1) : body.iconKey) : null;
-            const safeIpaKey = body.ipaKey ? (body.ipaKey.startsWith('/') ? body.ipaKey.substring(1) : body.ipaKey) : null;
-            
             const finalData = {
                 ...body,
                 appId: appId,
                 bundleId: appId,
                 info: body.info || body.subtitle || "", 
-                icon: safeIconKey ? `${CDN_URL}/${safeIconKey}` : body.icon,
-                ipa: safeIpaKey ? `${CDN_URL}/${safeIpaKey}` : body.ipa,
                 updatedAt: new Date().toISOString()
             };
             await appsCollection.updateOne({ appId: appId }, { $set: finalData }, { upsert: true });
@@ -177,31 +169,23 @@ app.post('/store-api', async (req, res) => {
             const appData = await appsCollection.findOne({ 
                 $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] 
             });
-
             if (appData) {
                 console.log(`🗑️ Storage Cleanup for: ${appData.name}`);
-                const cleanIconKey = appData.iconKey ? appData.iconKey.replace(/^\/+/, '') : null;
-                const cleanIpaKey = appData.ipaKey ? appData.ipaKey.replace(/^\/+/, '') : null;
-
-                if (cleanIconKey) {
-                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIconKey }).promise().catch(e => console.log("Icon delete skip"));
-                }
-                if (cleanIpaKey) {
-                    await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIpaKey }).promise().catch(e => console.log("IPA delete skip"));
-                }
+                const cleanIcon = appData.iconKey ? appData.iconKey.replace(/^\/+/, '') : null;
+                const cleanIpa = appData.ipaKey ? appData.ipaKey.replace(/^\/+/, '') : null;
+                if (cleanIcon) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIcon }).promise().catch(() => {});
+                if (cleanIpa) await s3.deleteObject({ Bucket: SPACES_BUCKET, Key: cleanIpa }).promise().catch(() => {});
             }
             await appsCollection.deleteOne({ $or: [ { appId: body.bundleId }, { bundleId: body.bundleId } ] });
             return res.json({ success: true });
         }
-    } catch (e) { 
-        console.error("Store API Error:", e.message);
-        res.status(500).json({ error: e.message }); 
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Plist Generator
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
+    // Ensure CDN is used for the IPA download link to avoid DigitalOcean speed throttling
     if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
         ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
     }
@@ -213,7 +197,7 @@ app.get('/plist', (req, res) => {
 });
 
 // ==========================================
-// 🛠️ 6. BULK RE-SIGNER CONFIG
+// 🛠️ RE-SIGNER
 // ==========================================
 const P12_PATH = path.join(__dirname, 'final.p12');
 const P12_PASS = '1212';
@@ -229,97 +213,54 @@ async function updateProvisioningProfile() {
         const targetProfile = profileList.find(p => p.attributes.name === 'kurde') || profileList[0];
         if (!targetProfile) throw new Error("No active profiles found.");
         fs.writeFileSync(PROVISION_PATH, Buffer.from(targetProfile.attributes.profileContent, 'base64'));
-        console.log(`✅ Downloaded .mobileprovision ('${targetProfile.attributes.name}')`);
-    } catch (e) { console.error("❌ Profile Error:", e.message); throw e; }
+    } catch (e) { console.error("Profile Error:", e.message); throw e; }
 }
 
 async function reSignAllApps() {
-    console.log("🔄 Starting Bulk Re-Sign (Ultra-Stability Mode)...");
-    
-    // 🧹 Pre-Clean Disk
-    const files = fs.readdirSync(__dirname);
-    files.forEach(file => {
-        if (file.includes('temp_in_') || file.includes('temp_out_')) {
-            try { fs.unlinkSync(path.join(__dirname, file)); } catch(e) {}
-        }
-    });
-
+    console.log("🔄 Starting Bulk Re-Sign...");
     try {
         await updateProvisioningProfile();
         await client.connect();
         const apps = await client.db("KurdeStore").collection("Apps").find({}).toArray();
-        const MASTER_BUNDLE_ID = "com.kurde.store"; // Update this to your Store's actual Bundle ID
 
         for (let app of apps) {
             if (!app.ipaKey || app.appId === "store_config_v1") continue;
 
-            const safeIpaKey = app.ipaKey.startsWith('/') ? app.ipaKey.substring(1) : app.ipaKey;
-            const tempInput = path.join(__dirname, `temp_in_${app.bundleId}.ipa`);
-            const tempOutput = path.join(__dirname, `temp_out_${app.bundleId}.ipa`);
-
-            console.log(`📦 Processing: ${app.name} (${app.bundleId})`);
+            const safeIpaKey = app.ipaKey.replace(/^\/+/, '');
+            const tempIn = path.join(__dirname, `in_${app.bundleId}.ipa`);
+            const tempOut = path.join(__dirname, `out_${app.bundleId}.ipa`);
 
             try {
-                // A. Download
-                const downloadStream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
-                const fileWriter = fs.createWriteStream(tempInput);
+                // 1. Download
+                const data = await s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).promise();
+                fs.writeFileSync(tempIn, data.Body);
+
+                // 2. Sign
                 await new Promise((resolve, reject) => {
-                    downloadStream.pipe(fileWriter);
-                    fileWriter.on('finish', resolve);
-                    fileWriter.on('error', reject);
+                    const z = spawn('./zsign', ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOut, tempIn]);
+                    z.on('close', (c) => c === 0 ? resolve() : reject(new Error("zsign fail")));
                 });
 
-                const stats = fs.statSync(tempInput);
-                const fileSizeInGB = stats.size / (1024 * 1024 * 1024);
-                const isMasterApp = app.bundleId === MASTER_BUNDLE_ID;
-
-                // B. Safe Clean
-                if (fileSizeInGB < 1.0 && !isMasterApp) {
-                    console.log(`🧹 Deep Cleaning ${app.name}...`);
-                    await new Promise((resolve) => {
-                        exec(`zip -d "${tempInput}" "Payload/*.app/PlugIns/*" "Payload/*.app/Watch/*" "Payload/*.app/SC_Info/*" "Payload/*.app/_CodeSignature" "Payload/*.app/Metadata" || true`, () => resolve());
-                    });
-                } else {
-                    console.log(`⏩ Skipping Deep Clean for ${app.name}.`);
-                }
-
-                // C. Sign
-                console.log(`✍️ Signing ${app.name}...`);
-                const args = ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOutput, tempInput];
-
-                await new Promise((resolve, reject) => {
-                    const signer = spawn('./zsign', args);
-                    let errOut = '';
-                    signer.stderr.on('data', d => errOut += d.toString());
-                    signer.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit code ${code}: ${errOut}`)));
-                });
-
-                // D. Upload
-                if (fs.existsSync(tempOutput)) {
-                    console.log(`☁️ Uploading ${app.name}...`);
-                    await s3.putObject({
-                        Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOutput),
-                        ACL: 'public-read', ContentType: 'application/octet-stream'
-                    }).promise();
-                    console.log(`✅ Upload Complete: ${app.name}`);
-                }
+                // 3. Upload
+                await s3.putObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOut), ACL: 'public-read' }).promise();
+                console.log(`✅ Signed: ${app.name}`);
             } catch (err) {
-                console.error(`❌ Critical Error on ${app.name}:`, err.message);
+                console.error(`❌ Error on ${app.name}:`, err.message);
             } finally {
-                if (fs.existsSync(tempInput)) try { fs.unlinkSync(tempInput); } catch(e) {}
-                if (fs.existsSync(tempOutput)) try { fs.unlinkSync(tempOutput); } catch(e) {}
-                await new Promise(r => setTimeout(r, 5000)); 
+                if (fs.existsSync(tempIn)) fs.unlinkSync(tempIn);
+                if (fs.existsSync(tempOut)) fs.unlinkSync(tempOut);
+                await new Promise(r => setTimeout(r, 5000)); // 5s Delay to save RAM
             }
         }
-    } catch (e) { console.error("❌ Bulk Sign Error:", e.message); }
+    } catch (e) { console.error("Sign Loop Error:", e.message); }
 }
 
 setInterval(reSignAllApps, 2 * 60 * 60 * 1000);
 
 app.post('/api/trigger-sign', (req, res) => {
-    reSignAllApps().catch(err => console.error("Trigger Error:", err));
-    res.json({ success: true, message: "🚀 Background signing started!" });
+    reSignAllApps().catch(() => {});
+    res.json({ success: true });
 });
 
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server listening on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Server on ${PORT}`));
