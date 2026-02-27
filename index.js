@@ -161,7 +161,14 @@ app.post('/store-api', async (req, res) => {
         if (action === "get_url") {
             const { fileName, fileType, contentType } = body;
             const key = `${fileType.replace(/\/$/, '')}/${Date.now()}-${fileName.replace(/[^a-zA-Z0-9.\-_]/g, '')}`;
-            const uploadUrl = s3.getSignedUrl('putObject', { Bucket: SPACES_BUCKET, Key: key, Expires: 3600, ContentType: contentType });
+            // 🛡️ Added ACL: 'public-read' to ensure icons and apps are always accessible immediately
+            const uploadUrl = s3.getSignedUrl('putObject', { 
+                Bucket: SPACES_BUCKET, 
+                Key: key, 
+                Expires: 3600, 
+                ContentType: contentType,
+                ACL: 'public-read' 
+            });
             return res.json({ uploadUrl, key });
         }
 
@@ -185,10 +192,9 @@ app.post('/store-api', async (req, res) => {
 // Plist Generator
 app.get('/plist', (req, res) => {
     let { ipaUrl, bundleId, name } = req.query;
-    // Ensure CDN is used for the IPA download link to avoid DigitalOcean speed throttling
-    if (ipaUrl && ipaUrl.includes('digitaloceanspaces.com') && !ipaUrl.includes('.cdn.')) {
-        ipaUrl = ipaUrl.replace('digitaloceanspaces.com', 'cdn.digitaloceanspaces.com');
-    }
+    
+    // 🚨 REMOVED the broken CDN override. It now uses the direct URL exactly as saved.
+    
     const plistXml = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict><key>items</key><array><dict><key>assets</key><array><dict><key>kind</key><string>software-package</string><key>url</key><string><![CDATA[${ipaUrl}]]></string></dict></array><key>metadata</key><dict><key>bundle-identifier</key><string>${bundleId}</string><key>bundle-version</key><string>1.0</string><key>kind</key><string>software</string><key>title</key><string>${name}</string></dict></dict></array></dict></plist>`;
