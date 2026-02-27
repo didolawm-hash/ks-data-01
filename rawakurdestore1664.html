@@ -89,8 +89,6 @@
 <script>
     const API_URL = "https://api.kurde.store/store-api";
     const S3_BASE_URL = "https://my-app-store.lon1.digitaloceanspaces.com";
-    
-    // Built-in safe SVG placeholder image.
     const SAFE_PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1NSIgaGVpZ2h0PSI1NSIgdmlld0JveD0iMCAwIDU1IDU1Ij48cmVjdCB3aWR0aD0iNTUiIGhlaWdodD0iNTUiIGZpbGw9IiMzMzMiIHJ4PSIxMiIvPjx0ZXh0IHg9IjI3LjUiIHk9IjMzIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiIgZm9udC1zaXplPSIxMiIgZmlsbD0iIzk5OSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+QXBwPC90ZXh0Pjwvc3ZnPg==';
 
     let allData = [];
@@ -101,43 +99,22 @@
     async function handleIpaSelection() {
         const file = document.getElementById('ipaFile').files[0];
         if (!file) return;
-        
         document.getElementById('size').value = (file.size / (1024 * 1024)).toFixed(1) + " MB";
-        
-        if (file.size > 300 * 1024 * 1024) {
-            updateStatus("⚠️ App is huge! Auto-Detect skipped to prevent crash. Please type Bundle ID manually.");
-            return; 
-        }
-
-        updateStatus("Scanning IPA for Bundle ID...");
-
+        updateStatus("Scanning IPA...");
         try {
-            if (typeof JSZip === 'undefined') throw new Error("JSZip failed to load. Ad-blocker might be active.");
-
             const zip = await JSZip.loadAsync(file);
-            const plistFile = Object.keys(zip.files).find(path => 
-                path.includes(".app/Info.plist") && !path.includes("__MACOSX")
-            );
-            
+            const plistFile = Object.keys(zip.files).find(path => path.includes(".app/Info.plist") && !path.includes("__MACOSX"));
             if (plistFile && !isEditing) {
                 const content = await zip.files[plistFile].async("string");
-                
                 let bMatch = content.match(/<key>CFBundleIdentifier<\/key>[\s\S]*?<string>(.*?)<\/string>/);
                 let vMatch = content.match(/<key>CFBundleShortVersionString<\/key>[\s\S]*?<string>(.*?)<\/string>/);
                 let nMatch = content.match(/<key>CFBundleDisplayName<\/key>[\s\S]*?<string>(.*?)<\/string>/) || content.match(/<key>CFBundleName<\/key>[\s\S]*?<string>(.*?)<\/string>/);
-                
-                if (bMatch && bMatch[1]) document.getElementById('bundleId').value = bMatch[1];
-                if (vMatch && vMatch[1]) document.getElementById('version').value = vMatch[1];
-                if (nMatch && nMatch[1] && !document.getElementById('name').value) document.getElementById('name').value = nMatch[1];
-                
-                updateStatus("✅ Bundle ID Auto-Detected: " + (bMatch ? bMatch[1] : "Unknown"));
-            } else {
-                updateStatus("⚠️ Could not find Info.plist in IPA", true);
+                if (bMatch) document.getElementById('bundleId').value = bMatch[1];
+                if (vMatch) document.getElementById('version').value = vMatch[1];
+                if (nMatch && !document.getElementById('name').value) document.getElementById('name').value = nMatch[1];
+                updateStatus("✅ Detected: " + (bMatch ? bMatch[1] : "Ready"));
             }
-        } catch (e) { 
-            console.error(e);
-            updateStatus("⚠️ Scan Error: " + e.message, true); 
-        }
+        } catch (e) { updateStatus("⚠️ Scan complete."); }
     }
 
     async function startUpload() {
@@ -147,35 +124,28 @@
         const name = document.getElementById('name').value;
         const bId = document.getElementById('bundleId').value;
 
-        if(!name || !bId) return updateStatus("❌ Name and BundleID required", true);
-        if(!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need both Icon and IPA", true);
-
+        if(!name || !bId) return updateStatus("❌ Name/BundleID required", true);
         btn.disabled = true;
-        updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
-            let oldIconUrl = document.getElementById('originalFullIconUrl').value;
-            let oldIpaUrl = document.getElementById('originalFullIpaUrl').value;
 
-            let finalIconUrl = "";
+            // UPLOAD ICON
             if (iconFile) {
-                updateStatus("Uploading New Icon...");
+                updateStatus("Uploading Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
-                finalIconUrl = S3_BASE_URL + "/" + iconKey;
-            } else {
-                finalIconUrl = iconKey ? (S3_BASE_URL + "/" + iconKey) : oldIconUrl;
+            }
+            
+            // UPLOAD IPA
+            if (ipaFile) {
+                updateStatus("Uploading IPA...");
+                ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
             }
 
-            let finalIpaUrl = "";
-            if (ipaFile) {
-                updateStatus("Uploading New IPA...");
-                ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
-                finalIpaUrl = S3_BASE_URL + "/" + ipaKey;
-            } else {
-                finalIpaUrl = ipaKey ? (S3_BASE_URL + "/" + ipaKey) : oldIpaUrl;
-            }
+            // Construct Final URLs
+            const finalIconUrl = iconKey ? `${S3_BASE_URL}/${iconKey.replace(/^\//, '')}` : document.getElementById('originalFullIconUrl').value;
+            const finalIpaUrl = ipaKey ? `${S3_BASE_URL}/${ipaKey.replace(/^\//, '')}` : document.getElementById('originalFullIpaUrl').value;
 
             const payload = {
                 action: "save_item",
@@ -194,112 +164,91 @@
             };
 
             await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-
-            updateStatus("✅ App Saved Successfully!");
-            setTimeout(() => location.reload(), 1500);
-        } catch (err) { updateStatus("❌ Error: " + err.message, true); btn.disabled = false; }
+            updateStatus("✅ Success!");
+            setTimeout(() => location.reload(), 1000);
+        } catch (err) { 
+            updateStatus("❌ " + err.message, true); 
+            btn.disabled = false; 
+        }
     }
 
     async function uploadFile(file, folder, barId) {
         const bar = document.getElementById(barId);
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) });
+        // Get the signed URL from your backend
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) 
+        });
         const { uploadUrl, key } = await res.json();
+
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', uploadUrl);
+            // ONLY set Content-Type. Do not set ACL headers here (we do it in backend)
             xhr.setRequestHeader('Content-Type', file.type);
-            // 🚨 We removed the x-amz-acl line here to prevent CORS conflicts!
-            xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
-            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed"));
-            xhr.onerror = () => reject(new Error("Network Error")); // Captures drops
+            
+            xhr.upload.onprogress = (e) => { 
+                if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; 
+            };
+            
+            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed: " + xhr.status));
+            xhr.onerror = () => reject(new Error("Network Error - Check CORS in DigitalOcean"));
             xhr.send(file);
         });
     }
 
     async function loadApps() {
-        try {
-            updateStatus("Loading apps...");
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
-            if (!res.ok) throw new Error("Connection Failed");
-            allData = await res.json();
-            renderLists(allData);
-            updateStatus("Ready");
-        } catch (e) { console.error(e); updateStatus("❌ Load Failed: " + e.message, true); }
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
+        allData = await res.json();
+        renderLists(allData);
     }
 
     function renderLists(items) {
         const aList = document.getElementById('appsList');
         const gList = document.getElementById('gamesList');
         aList.innerHTML = "<h3>📱 Applications</h3>"; gList.innerHTML = "<h3>🎮 Games</h3>";
-        
-        if (!items || items.length === 0) {
-            aList.innerHTML += "<p>No apps found.</p>"; return;
-        }
-
         items.forEach(item => {
             const card = document.createElement('div');
             card.className = 'app-item';
-            
-            let iconSrc = item.icon || (item.iconKey ? (S3_BASE_URL + "/" + item.iconKey) : SAFE_PLACEHOLDER);
-            const itemString = encodeURIComponent(JSON.stringify(item));
-
+            let iconSrc = item.icon || (item.iconKey ? `${S3_BASE_URL}/${item.iconKey.replace(/^\//, '')}` : SAFE_PLACEHOLDER);
             card.innerHTML = `
                 <img src="${iconSrc}" class="app-icon" onerror="this.src='${SAFE_PLACEHOLDER}'">
                 <div class="app-info">
                     <div class="app-name">${item.name}</div>
                     <div class="app-subtitle">${item.info || ''}</div> 
-                    <div class="app-meta">${item.version || '1.0'} • ${item.size || 'Unknown'}</div>
+                    <div class="app-meta">${item.version} • ${item.size}</div>
                 </div>
                 <div class="btn-group">
-                    <button onclick="editApp('${itemString}')" class="edit-btn">Edit</button>
-                    <button onclick="deleteApp('${item.appId || item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
-                </div>
-            `;
+                    <button onclick="editApp('${encodeURIComponent(JSON.stringify(item))}')" class="edit-btn">Edit</button>
+                    <button onclick="deleteApp('${item.bundleId}', '${item.name}')" class="delete-btn">Delete</button>
+                </div>`;
             (String(item.isGame) === "true") ? gList.appendChild(card) : aList.appendChild(card);
         });
     }
 
-    function editApp(encodedItem) {
-        const item = JSON.parse(decodeURIComponent(encodedItem));
+    function editApp(data) {
+        const item = JSON.parse(decodeURIComponent(data));
         isEditing = true;
-        
         document.getElementById('formTitle').innerText = "🔄 Update: " + item.name;
-        document.getElementById('btn').innerText = "Update App";
-        document.getElementById('cancelBtn').style.display = "inline-block";
-        document.getElementById('iconFile').style.opacity = "0.5"; 
-        
         document.getElementById('name').value = item.name;
         document.getElementById('info').value = item.info || "";
         document.getElementById('desc').value = item.desc || "";
-        document.getElementById('bundleId').value = item.bundleId || item.appId;
-        document.getElementById('version').value = item.version || "";
-        document.getElementById('size').value = item.size || "";
+        document.getElementById('bundleId').value = item.bundleId;
+        document.getElementById('version').value = item.version;
+        document.getElementById('size').value = item.size;
         document.getElementById('isGame').value = String(item.isGame);
-        
         document.getElementById('originalIconKey').value = item.iconKey || "";
         document.getElementById('originalIpaKey').value = item.ipaKey || "";
-        document.getElementById('originalFullIconUrl').value = item.icon || ""; 
-        document.getElementById('originalFullIpaUrl').value = item.ipa || ""; 
-
-        document.getElementById('bundleId').readOnly = true;
-        document.getElementById('bundleId').style.opacity = "0.6";
-        
-        updateStatus("⚠️ Update Mode: Edit metadata or upload new files to overwrite.");
+        document.getElementById('originalFullIconUrl').value = item.icon || "";
+        document.getElementById('originalFullIpaUrl').value = item.ipa || "";
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-
-    function resetForm() { location.reload(); }
 
     async function deleteApp(id, name) {
         if (confirm(`Delete ${name}?`)) {
             await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "delete_app", bundleId: id }) });
             loadApps();
         }
-    }
-
-    function filterList() {
-        const q = document.getElementById('searchInput').value.toLowerCase();
-        renderLists(allData.filter(i => (i.name || "").toLowerCase().includes(q)));
     }
 
     function updateStatus(m, e=false) {
