@@ -208,9 +208,10 @@
             const xhr = new XMLHttpRequest();
             xhr.open('PUT', uploadUrl);
             xhr.setRequestHeader('Content-Type', file.type);
+            // 🚨 We removed the x-amz-acl line here to prevent CORS conflicts!
             xhr.upload.onprogress = (e) => { if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; };
             xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed"));
-            xhr.onerror = () => reject(new Error("Network Error"));
+            xhr.onerror = () => reject(new Error("Network Error")); // Captures drops
             xhr.send(file);
         });
     }
