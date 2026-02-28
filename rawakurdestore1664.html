@@ -117,35 +117,38 @@
         } catch (e) { updateStatus("⚠️ Scan complete."); }
     }
 
-    async function startUpload() {
+   async function startUpload() {
         const btn = document.getElementById('btn');
         const iconFile = document.getElementById('iconFile').files[0];
         const ipaFile = document.getElementById('ipaFile').files[0];
         const name = document.getElementById('name').value;
         const bId = document.getElementById('bundleId').value;
 
-        if(!name || !bId) return updateStatus("❌ Name/BundleID required", true);
+        if(!name || !bId) return updateStatus("❌ Name and BundleID required", true);
+        if(!isEditing && (!iconFile || !ipaFile)) return updateStatus("❌ New apps need both Icon and IPA", true);
+
         btn.disabled = true;
+        updateStatus(isEditing ? "Updating..." : "Uploading...");
 
         try {
             let iconKey = document.getElementById('originalIconKey').value;
             let ipaKey = document.getElementById('originalIpaKey').value;
 
-            // UPLOAD ICON
+            // 1. Upload Icon
             if (iconFile) {
                 updateStatus("Uploading Icon...");
                 iconKey = await uploadFile(iconFile, 'icons', 'iconBar');
             }
-            
-            // UPLOAD IPA
+
+            // 2. Upload IPA
             if (ipaFile) {
                 updateStatus("Uploading IPA...");
                 ipaKey = await uploadFile(ipaFile, 'apps', 'ipaBar');
             }
 
-            // Construct Final URLs
-            const finalIconUrl = iconKey ? `${S3_BASE_URL}/${iconKey.replace(/^\//, '')}` : document.getElementById('originalFullIconUrl').value;
-            const finalIpaUrl = ipaKey ? `${S3_BASE_URL}/${ipaKey.replace(/^\//, '')}` : document.getElementById('originalFullIpaUrl').value;
+            // 🛠️ FIX: Ensure no double slashes in the final URLs
+            const cleanIconKey = iconKey ? iconKey.replace(/^\/+/, '') : "";
+            const cleanIpaKey = ipaKey ? ipaKey.replace(/^\/+/, '') : "";
 
             const payload = {
                 action: "save_item",
@@ -157,19 +160,60 @@
                 version: document.getElementById('version').value,
                 size: document.getElementById('size').value,
                 isGame: document.getElementById('isGame').value === "true",
-                iconKey: iconKey,
-                ipaKey: ipaKey,
-                icon: finalIconUrl,
-                ipa: finalIpaUrl
+                iconKey: cleanIconKey,
+                ipaKey: cleanIpaKey,
+                icon: cleanIconKey ? `${S3_BASE_URL}/${cleanIconKey}` : document.getElementById('originalFullIconUrl').value,
+                ipa: cleanIpaKey ? `${S3_BASE_URL}/${cleanIpaKey}` : document.getElementById('originalFullIpaUrl').value
             };
 
-            await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            updateStatus("✅ Success!");
-            setTimeout(() => location.reload(), 1000);
+            const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await response.json();
+            
+            if(result.success) {
+                updateStatus("✅ App Saved Successfully!");
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                throw new Error(result.error || "Failed to save");
+            }
         } catch (err) { 
-            updateStatus("❌ " + err.message, true); 
+            updateStatus("❌ Error: " + err.message, true); 
             btn.disabled = false; 
         }
+    }
+
+    async function uploadFile(file, folder, barId) {
+        const bar = document.getElementById(barId);
+        // Request the Signed URL from your backend
+        const res = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) 
+        });
+        
+        const { uploadUrl, key } = await res.json();
+        
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('PUT', uploadUrl);
+            
+            // 🛠️ IMPORTANT: Only set the Content-Type. 
+            // Do NOT set x-amz-acl here as it often triggers a "Network Error" (CORS violation)
+            xhr.setRequestHeader('Content-Type', file.type);
+            
+            xhr.upload.onprogress = (e) => { 
+                if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; 
+            };
+            
+            xhr.onload = () => {
+                if (xhr.status === 200) {
+                    resolve(key);
+                } else {
+                    reject(new Error("Upload failed with status: " + xhr.status));
+                }
+            };
+            
+            xhr.onerror = () => reject(new Error("Network Error - Connection blocked by browser/storage"));
+            xhr.send(file);
+        });
     }
 
     async function uploadFile(file, folder, barId) {
