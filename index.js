@@ -237,17 +237,25 @@ async function reSignAllApps() {
             const tempOut = path.join(__dirname, `out_${app.bundleId}.ipa`);
 
             try {
-                // 1. Download
-                const data = await s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).promise();
-                fs.writeFileSync(tempIn, data.Body);
+                // 1. Download (FIXED: Using Streams to stop the RAM crash)
+                await new Promise((resolve, reject) => {
+                    const fileStream = fs.createWriteStream(tempIn);
+                    const s3Stream = s3.getObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey }).createReadStream();
+                    
+                    s3Stream.on('error', reject);
+                    fileStream.on('error', reject);
+                    fileStream.on('close', resolve);
+                    
+                    s3Stream.pipe(fileStream);
+                });
 
-                // 2. Sign
+                // 2. Sign (Your exact working code)
                 await new Promise((resolve, reject) => {
                     const z = spawn('./zsign', ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOut, tempIn]);
                     z.on('close', (c) => c === 0 ? resolve() : reject(new Error("zsign fail")));
                 });
 
-                // 3. Upload
+                // 3. Upload (Your exact working code)
                 await s3.putObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOut), ACL: 'public-read' }).promise();
                 console.log(`✅ Signed: ${app.name}`);
             } catch (err) {
