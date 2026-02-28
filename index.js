@@ -251,12 +251,12 @@ async function reSignAllApps() {
 
                 // 2. Sign (Your exact working code)
                 await new Promise((resolve, reject) => {
-                    const z = spawn('./zsign', ['-f', '-q', '-z', '1', '-b', app.bundleId, '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOut, tempIn]);
+                    const z = spawn('./zsign', ['-f', '-q', '-k', path.resolve(P12_PATH), '-p', P12_PASS, '-m', path.resolve(PROVISION_PATH), '-o', tempOut, tempIn]);
                     z.on('close', (c) => c === 0 ? resolve() : reject(new Error("zsign fail")));
                 });
 
                 // 3. Upload (Your exact working code)
-                await s3.putObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOut), ACL: 'public-read' }).promise();
+                await s3.putObject({ Bucket: SPACES_BUCKET, Key: safeIpaKey, Body: fs.createReadStream(tempOut), ACL: 'public-read', ContentType: 'application/octet-stream' }).promise();
                 console.log(`✅ Signed: ${app.name}`);
             } catch (err) {
                 console.error(`❌ Error on ${app.name}:`, err.message);
