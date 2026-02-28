@@ -217,29 +217,30 @@
     }
 
     async function uploadFile(file, folder, barId) {
-        const bar = document.getElementById(barId);
-        // Get the signed URL from your backend
-        const res = await fetch(API_URL, { 
-            method: 'POST', 
-            body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) 
-        });
-        const { uploadUrl, key } = await res.json();
+    const bar = document.getElementById(barId);
+    const res = await fetch(API_URL, { 
+        method: 'POST', 
+        body: JSON.stringify({ action: 'get_url', fileName: file.name, fileType: folder, contentType: file.type }) 
+    });
+    const { uploadUrl, key } = await res.json();
 
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('PUT', uploadUrl);
-            // ONLY set Content-Type. Do not set ACL headers here (we do it in backend)
-            xhr.setRequestHeader('Content-Type', file.type);
-            
-            xhr.upload.onprogress = (e) => { 
-                if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; 
-            };
-            
-            xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed: " + xhr.status));
-            xhr.onerror = () => reject(new Error("Network Error - Check CORS in DigitalOcean"));
-            xhr.send(file);
-        });
-    }
+    return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('PUT', uploadUrl);
+        
+        // 🛠️ The console says the URL expects these headers:
+        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.setRequestHeader('x-amz-acl', 'public-read'); // Add this specifically
+        
+        xhr.upload.onprogress = (e) => { 
+            if (e.lengthComputable) bar.style.width = (e.loaded / e.total) * 100 + "%"; 
+        };
+        
+        xhr.onload = () => (xhr.status === 200) ? resolve(key) : reject(new Error("Upload failed: " + xhr.status));
+        xhr.onerror = () => reject(new Error("Network Error - Check DigitalOcean CORS Headers"));
+        xhr.send(file);
+    });
+}
 
     async function loadApps() {
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "list_apps" }) });
